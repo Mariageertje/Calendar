@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261028141153";
+<script>window.CAL_BUILD="20261028144214";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -74,7 +74,10 @@ async function syncOnce(){const c=conf();if(!c.token||!c.repo)return status("set
         if(p.status===409||p.status===422){listing[coll]=true;continue}
         if(!p.ok)throw new Error("Saving to GitHub failed ("+p.status+")");
         sha=(await p.json()).content.sha}
-      const changed=!same(out,mem[coll]);mem[coll]=out;dirty[coll].clear();persist(coll);shas[coll]=sha;if(changed)emit(coll);break}}
+      // changes made on this device while the sync was under way stay (they go out with the next sync)
+      const fin=Object.assign({},out),still=new Set();
+      for(const id of dirty[coll]){const l=mem[coll][id];if(l&&(!out[id]||(l._t||0)>(out[id]._t||0))){fin[id]=l;still.add(id)}}
+      const changed=!same(fin,mem[coll]);mem[coll]=fin;dirty[coll]=still;persist(coll);shas[coll]=still.size?null:sha;if(changed)emit(coll);if(still.size)again=true;break}}
   ls.set("shas",JSON.stringify(shas));lastOk=Date.now();ls.set("lastok",String(lastOk));lastErr="";status()}
 async function sync(){if(syncing){again=true;return}syncing=true;status("syncing");
   try{await syncOnce()}catch(e){lastErr=String(e&&e.message||e);syncing=false;status(navigator.onLine?"error":"offline")}
@@ -584,7 +587,7 @@ const HORIZONS=[["season","Until February","Foundation for this semester"],["mon
 const DOW=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
-const START_H=5, END_H=24;
+let START_H=5;const END_H=24; // START_H moves earlier when something in view starts before 05:00
 const $=id=>document.getElementById(id);
 const pad=n=>String(n).padStart(2,"0");
 const dayNum=s=>{const[y,m,d]=s.split("-").map(Number);return Math.round(Date.UTC(y,m-1,d)/864e5)};
@@ -612,7 +615,7 @@ let reviewOpen=false;
 const lockedDl=it=>!!(it&&it.kind==="task"&&it.deadline&&!it.done&&it.date);
 function dlLocked(it){if(!lockedDl(it))return false;toast("Official deadline: it stays on "+DOW[isoDow(it.date)-1]+" "+fmtShort(it.date)+". If the date really changed, edit it in the task.");return true}
 function toast(t){document.querySelectorAll(".toast").forEach(x=>x.remove());const el=h("div",{class:"toast",text:t});document.body.appendChild(el);setTimeout(()=>el.remove(),2600)}
-function clean(o){const c={};for(const[k,v]of Object.entries(o)){if(v===undefined||v===""||v===null)continue;if(k==="id")continue;c[k]=v}return c}
+function clean(o){const c={};for(const[k,v]of Object.entries(o)){if(v===undefined||v===""||v===null)continue;if(k==="id"||k==="_src"||k==="_part")continue;c[k]=v}return c}
 async function put(coll,obj){
   if(!db||!writable){toast("This calendar is read-only in this view.");return false}
   const id=obj.id||newId();
@@ -724,11 +727,18 @@ function routineOn(it,date){
   return true;
 }
 function spans(kind,date){return items.filter(i=>i.kind===kind&&i.date<=date&&(i.endDate||i.date)>=date)}
+const overnight=it=>it.kind==="event"&&!it.marker&&!!it.start&&!!it.end&&mins(it.end)<mins(it.start);
+function partOf(it,date,startDay,endDay){ // the piece of a block that runs past midnight falling on this date
+  if(date===endDay&&date!==startDay&&mins(it.end)===0)return null;
+  return Object.assign({},it,{start:date===startDay?it.start:"00:00",end:date===endDay?it.end:"24:00",_src:it,_part:date===startDay?"first":date===endDay?"last":"mid"})}
 function eventsOn(date,all){
   const dn=dayNum(date), routine=[], fixed=[];
   for(const it of items){
     if(it.kind!=="event")continue;
-    if(it.repeat){if(routineOn(it,date))routine.push({it,isRoutine:true})}
+    if(it.repeat){
+      if(routineOn(it,date)){if(overnight(it))routine.push({it:partOf(it,date,date,addDays(date,1)),isRoutine:true,noDrag:true});else routine.push({it,isRoutine:true})}
+      if(overnight(it)&&routineOn(it,addDays(date,-1))){const p=partOf(it,date,addDays(date,-1),date);if(p)routine.push({it:p,isRoutine:true,noDrag:true})}}
+    else if(it.endDate&&it.endDate>it.date){if(it.date<=date&&it.endDate>=date){const p=partOf(it,date,it.date,it.endDate);if(p)fixed.push({it:p,isRoutine:false})}}
     else if(it.date===date)fixed.push({it,isRoutine:false});
   }
   const aways=items.filter(i=>i.kind==="away");
@@ -892,6 +902,7 @@ function renderCal(){
     const c=h("div",{class:"ad"+(d===t?" today":""),"data-date":d});
     for(const a of spans("away",d).concat(spans("allday",d))){let txt=a.title;if(a.kind==="away"){if(a.date===d&&a.start)txt+=" (from "+a.start+")";if((a.endDate||a.date)===d&&a.end)txt+=" (until "+a.end+")"}
       c.appendChild(h("button",{class:"banner"+(a.kind==="allday"?" allday":""),title:a.notes||"",text:txt,onclick:()=>openEditor(a)}))}
+    for(const o of eventsOn(d).filter(o=>o.it._part==="mid")){const it=o.it,c0=CATS[it.cat]?it.cat:"study";c.appendChild(h("button",{class:"banner evmulti"+(it.optional?" opt":""),style:"background:var(--c-"+c0+"-bg);color:var(--c-"+c0+");border-color:transparent",title:it.title,text:"↔ "+it.title,onclick:()=>openEditor(it._src)}))}
     for(const x of subOn(d).filter(x=>x.allDay)){const sb=subById(x.sub);c.appendChild(h("button",{class:"banner sub",style:subStyle(sb),title:(sb&&sb.name)||"",text:x.title,onclick:()=>openSubEvent(x)}))}
     const tasks=items.filter(x=>x.kind==="task"&&x.date===d&&!x.done).sort((a,b)=>(b.deadline?1:0)-(a.deadline?1:0)||(a.time||"99").localeCompare(b.time||"99"));
     for(const tk of tasks){
@@ -905,6 +916,8 @@ function renderCal(){
     c.addEventListener("drop",async e=>{e.preventDefault();c.classList.remove("over");const id=e.dataTransfer.getData("text/plain");const it=items.find(x=>x.id===id);if(!it||it.kind!=="task"||it.date===d)return;await taskToDay(it,d)});
     c.appendChild(h("div",{class:"addrow2"},h("button",{class:"addtask addone",text:"+","aria-label":"Add to this day",onclick:()=>openQuick({date:d})})));
     grid.appendChild(c)}
+  let early=300;for(const d of ds){for(const o of eventsOn(d))if(!o.it.marker&&o.it._part!=="mid")early=Math.min(early,mins(o.it.start));for(const x of subOn(d))if(!x.allDay)early=Math.min(early,mins(x.start))}
+  START_H=Math.max(0,Math.min(5,Math.floor(early/60)));
   const H=END_H-START_H, hourPx=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--hour"))||48;
   const hours=h("div",{class:"hours",style:"height:"+H*hourPx+"px"});
   for(let x=START_H+1;x<END_H;x++)hours.appendChild(h("div",{class:"hl",style:"top:"+(x-START_H)*hourPx+"px",text:pad(x)+":00"}));
@@ -941,7 +954,7 @@ function renderCal(){
       const mk=h("button",{class:"mark",style:"top:"+(mm-START_H*60)/60*hourPx+"px","aria-label":o.it.title+" "+o.it.start},h("span",{text:"☾ "+o.it.title+" "+o.it.start}));
       mk.onclick=ev=>{ev.stopPropagation();if(ev.detail===0)openEditor(o.it,o.isRoutine?d:null)};attachDrag(mk,o,d,hourPx,true);if(sel&&sel.k===selKey(o.it,d)){mk.classList.add("sel");sel.it=o.it}col.appendChild(mk)}
     const subEv=subOn(d).filter(x=>!x.allDay).map(x=>({it:x,isSub:true}));
-    for(const o of layout(evs.filter(o=>!o.it.marker).concat(subEv).sort((a,b)=>mins(a.it.start)-mins(b.it.start)||mins(b.it.end)-mins(a.it.end)))){
+    for(const o of layout(evs.filter(o=>!o.it.marker&&o.it._part!=="mid").concat(subEv).sort((a,b)=>mins(a.it.start)-mins(b.it.start)||mins(b.it.end)-mins(a.it.end)))){
       const it=o.it,s=Math.max(mins(it.start),START_H*60),e=Math.min(Math.max(mins(it.end),s+15),END_H*60);
       const top=(s-START_H*60)/60*hourPx,ht=Math.max((e-s)/60*hourPx-2,16);
       if(o.isSub){const sb=subById(it.sub);const b=h("button",{class:"ev sub"+(ht<34?" short":""),style:"top:"+top+"px;height:"+ht+"px;left:calc("+(o.col/o.ncol*100)+"% + 3px);width:calc("+(100/o.ncol)+"% - 6px);"+subStyle(sb),title:it.title+" · "+it.start+"–"+it.end+(it.location?"\n"+it.location:"")+(sb&&sb.name?"\n"+sb.name:"")},
@@ -949,8 +962,8 @@ function renderCal(){
         b.onclick=ev=>{ev.stopPropagation();openSubEvent(it)};col.appendChild(b);continue}
       const c=CATS[it.cat]?it.cat:"study";
       const b=h("button",{class:"ev"+(o.isRoutine?" routine":"")+(it.optional?" opt":"")+(ht<34?" short":""),style:"top:"+top+"px;height:"+ht+"px;left:calc("+(o.col/o.ncol*100)+"% + 3px);width:calc("+(100/o.ncol)+"% - 6px);background:var(--c-"+c+"-bg);color:var(--c-"+c+")",title:it.title+" · "+it.start+"–"+it.end+(it.location?"\n"+it.location:"")+(it.notes?"\n"+it.notes:"")+(o.isRoutine?"\n(routine)":"")},
-        h("span",{class:"t",text:it.title}),h("span",{class:"tm",text:(ht<34?" ":"")+it.start+"–"+it.end}),(it.location&&ht>=46?h("span",{class:"loc",text:it.location}):null),h("span",{class:"rzt","aria-hidden":"true",title:"Drag to change the start time"}),h("span",{class:"rz","aria-hidden":"true",title:"Drag to change the end time"}));
-      b.onclick=ev=>{ev.stopPropagation();if(ev.detail===0)openEditor(it,o.isRoutine?d:null)};attachDrag(b,o,d,hourPx,false);if(sel&&sel.k===selKey(it,d)){b.classList.add("sel");sel.it=it}col.appendChild(b)}
+        h("span",{class:"t",text:it.title}),h("span",{class:"tm",text:(ht<34?" ":"")+(it._src?(it._part==="first"?it.start+" → "+DOW[isoDow(it._src.endDate||addDays(d,1))-1]+" "+it._src.end:"→ "+it._src.end):it.start+"–"+it.end)}),(it.location&&ht>=46?h("span",{class:"loc",text:it.location}):null),h("span",{class:"rzt","aria-hidden":"true",title:"Drag to change the start time"}),h("span",{class:"rz","aria-hidden":"true",title:"Drag to change the end time"}));
+      b.onclick=ev=>{ev.stopPropagation();if(ev.detail===0||o.noDrag)openEditor(it,o.isRoutine?d:null)};if(!o.noDrag)attachDrag(b,o,d,hourPx,false);if(sel&&sel.k===selKey(it,d)){b.classList.add("sel");sel.it=it}col.appendChild(b)}
     if(d===t&&nowM>=START_H*60)col.appendChild(h("div",{class:"nowline",style:"top:"+(nowM-START_H*60)/60*hourPx+"px"}));
     grid.appendChild(col)}
   const prevLeft=sc.scrollLeft,sameWin=keep&&keep.start===winStart;
@@ -1513,7 +1526,7 @@ function rowGestures(row,o){row.classList.add("swipe");const OPEN=84;let x0=0,y0
     else if(o.onDone&&dx>40){row.classList.add("sw-open");row.dataset.swo="r";set(OPEN);swOpen.add(close)}else close()});
   row.addEventListener("pointercancel",()=>{clearTimeout(hold);on=false;row.classList.remove("swiping");if(!row.classList.contains("sw-open"))close()})}
 function swipeDel(row,onDel){rowGestures(row,{onDel})}
-async function delItem(it){const before=snapIt(it);if(await del("items",it.id)){pushUndo("Deleted “"+it.title+"”",()=>save(before));return true}return false}
+async function delItem(it){if(it&&it._src)it=it._src;const before=snapIt(it);if(await del("items",it.id)){pushUndo("Deleted “"+it.title+"”",()=>save(before));return true}return false}
 async function doneItem(it){const before=snapIt(it);const ok=await markDone(it);if(ok)pushUndo("Done: “"+it.title+"”",()=>save(before));return ok}
 
 /* ---------- a task becomes a block: drop it on a time ---------- */
@@ -1652,8 +1665,8 @@ function parseQuick(raw,ctx){ctx=ctx||{};let s=" "+(raw||"").replace(/\s+/g," ")
     const bare=!m[2]&&!m[3]&&!m[4]&&!m[7]&&!m[8]&&!m[9]&&!m[5]&&!m[10]&&!/u|h/i.test(m[0].replace(/tot|to|until|till|van|from/gi,""));
     if(bare&&+m[1]<7&&+m[6]<=12){const v=ymd(m[1],m[6]);if(v){date=v;return}}
     if(!m[5]&&!m[10]&&+m[1]<7&&+m[6]<=12){a+=720;b+=720}
-    if(b<=a){if(!m[2]&&!m[3]&&!m[7]&&!m[8]&&+m[6]<=12&&+m[1]<=31){const v=ymd(m[1],m[6]);if(v){date=v;return}}return false}
-    start=a;end=Math.min(b,1439)});
+    if(b<=a){if(bare&&+m[6]<=12&&+m[1]<=31){const v=ymd(m[1],m[6]);if(v){date=v;return}}if(b===a)return false;start=a;end=b+1440;return}
+    start=a;end=b});
   cut(/\s(\d{1,2})-(\d{1,2})(?:-(\d{2,4}))?(?=\s)/,m=>{const v=ymd(m[1],m[2],m[3]);if(!v)return false;date=v});
   // durations: 45 min, 1h30, 2 uur, 1,5u
   cut(/\s(\d+(?:[.,]\d+)?)\s*(min|mins|minuten|minutes|m)(?=\s)/i,m=>{dur=Math.round(parseFloat(m[1].replace(",",".")))});
@@ -1667,10 +1680,11 @@ function parseQuick(raw,ctx){ctx=ctx||{};let s=" "+(raw||"").replace(/\s+/g," ")
   let title=s.replace(/\s+/g," ").trim().replace(/^(om|op|at|on|van|from|tot|to)\s+/i,"").replace(/\s+(om|op|at|on|van|from|tot|to)$/i,"").replace(/^[-–,·:]+\s*|\s*[-–,·:]+$/g,"").trim();
   if(title)title=title[0].toUpperCase()+title.slice(1);
   if(start==null&&ctx.start&&!dur){start=mins(ctx.start);end=mins(ctx.end)}else if(start==null&&ctx.start&&dur){start=mins(ctx.start)}
-  if(start!=null){const o={kind:"event",title,date:date||ctx.date||t,start:hm(start),end:hm(Math.min(end!=null?end:start+(dur||60),1439)),cat:guessCat(title)};if(loc)o.location=loc;return o}
+  if(start!=null){const d0=date||ctx.date||t,E=end!=null?end:start+(dur||60);const o={kind:"event",title,date:d0,start:hm(start),end:hm(E%1440),cat:guessCat(title)};
+    if(E>1440)o.endDate=addDays(d0,Math.floor(E/1440));else if(E===1440)o.end="23:59";if(loc)o.location=loc;return o}
   const o={kind:"task",title};if(week&&!date){o.week=week;o.order=Date.now()}else o.date=date||ctx.date||t;if(deadline)o.deadline=true;if(dur)o.mins=dur;if(loc)o.notes="@ "+loc;return o}
 function describeQuick(o){const d=o.date?(o.date===todayStr()?"Today":o.date===addDays(todayStr(),1)?"Tomorrow":DOW[isoDow(o.date)-1]+" "+fmtShort(o.date)):"";
-  if(o.kind==="event")return ["Block",d,o.start+"–"+o.end,o.location,CATS[o.cat]].filter(Boolean).join(" · ");
+  if(o.kind==="event")return ["Block",d,o.start+"–"+(o.endDate?DOW[isoDow(o.endDate)-1]+" "+o.end:o.end),o.location,CATS[o.cat]].filter(Boolean).join(" · ");
   return ["Task",o.week?"week of "+fmtShort(o.week):d,o.deadline?"deadline":"",o.mins?fmtDur(o.mins):""].filter(Boolean).join(" · ")}
 function openQuick(ctx){ctx=ctx||{};
   const {ov,sh,close}=sheetShell("New");
@@ -1870,7 +1884,7 @@ $("focusBtn").onclick=()=>openFocus();$("timerPill").onclick=()=>openFocus();
 /* ---------- copy + paste ---------- */
 let clip=null;
 const COPY_MS=2000; // on touch: keep holding still this long to get Copy
-function copyItem(it){const c=JSON.parse(JSON.stringify(it));for(const k of["id","repeat","done","fromList","fromItem"])delete c[k];
+function copyItem(it){if(it&&it._src)it=it._src;const c=JSON.parse(JSON.stringify(it));for(const k of["id","repeat","done","fromList","fromItem"])delete c[k];
   clip={it:c,span:(it.endDate&&it.date)?dayNum(it.endDate)-dayNum(it.date):0};renderClip()}
 let popEl=null;
 let popOpt=null;
@@ -2018,6 +2032,14 @@ function attachDrag(el,o,d,hourPx,isMarker){
   });
 }
 async function commitDrag(it,isRoutine,occDate,newDate,ns,ne,isMarker){
+  if(it._src&&!isRoutine){const src=it._src,A=(dd,m)=>dayNum(dd)*1440+m;
+    const s0=A(occDate,mins(it.start)),e0=A(occDate,mins(it.end)),s1=A(newDate,ns),e1=A(newDate,ne);
+    let S=A(src.date,mins(src.start)),E=A(src.endDate||src.date,mins(src.end));
+    if(s1-s0===e1-e0){S+=s1-s0;E+=s1-s0}else{if(s1!==s0)S=s1;if(e1!==e0)E=e1}
+    if(E-S<5){dragging=false;render();return}
+    const sd=fromDayNum(Math.floor(S/1440)),ed=fromDayNum(Math.floor(E/1440)),before=snapIt(src);
+    const mv=Object.assign({},src,{date:sd,start:hm(S%1440),end:hm(E%1440)});if(ed>sd&&!(ed===addDays(sd,1)&&E%1440===0))mv.endDate=ed;else{delete mv.endDate;if(E%1440===0)mv.end="23:59"}
+    const ok=await save(mv);dragging=false;if(ok)pushUndo("Moved “"+src.title+"”",()=>save(before));render();return}
   const start=hm(ns),end=isMarker?hm(Math.min(ns+1,1439)):hm(Math.min(ne,1439));
   if(start===it.start&&end===it.end&&newDate===occDate){dragging=false;render();return}
   const where=(newDate!==occDate?DOW[isoDow(newDate)-1]+" "+fmtShort(newDate)+", ":"")+start+(isMarker?"":"–"+end);
@@ -2037,7 +2059,7 @@ async function commitDrag(it,isRoutine,occDate,newDate,ns,ne,isMarker){
 /* ---------- event editor ---------- */
 const esc=x=>String(x).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
 function knownLocations(){const n={};for(const x of items)if(x.location){const k=x.location.trim();n[k]=(n[k]||0)+1}return Object.keys(n).sort((a,b)=>n[b]-n[a]||a.localeCompare(b)).slice(0,40)}
-function openEditor(it,occDate){
+function openEditor(it,occDate){if(it&&it._src)it=it._src;
   const isNew=!it.id;const kind=it.kind||"event";const r=it.repeat||null;
   const ov=document.createElement("div");ov.className="overlay";
   const sh=document.createElement("form");sh.className="sheet";sh.setAttribute("aria-label","Edit");
@@ -2049,7 +2071,7 @@ function openEditor(it,occDate){
      ['event','task','away','allday'].map(k=>'<button type="button" data-k="'+k+'" aria-pressed="'+(kind===k)+'">'+({event:"Block",task:"Task",away:"Trip / away",allday:"Day note"})[k]+'</button>').join("")+'</div>'+
    '<label>Title<input type="text" id="f-title" required></label>'+
    '<div class="row"><label class="k-event k-task k-away k-allday">Date<input type="date" id="f-date"></label>'+
-     '<label class="k-away k-allday">Until<input type="date" id="f-endDate"></label></div>'+
+     '<label class="k-event k-away k-allday" id="f-endLbl"><span id="f-endTxt">Until</span><input type="date" id="f-endDate"></label></div>'+
    '<div class="row k-event k-away"><label>Start<input type="time" id="f-start" step="60"></label><label>End<input type="time" id="f-end" step="60"></label></div>'+
    '<div class="row k-task"><label>Time (optional)<input type="time" id="f-time" step="60"></label><label class="inline" style="align-self:end"><input type="checkbox" id="f-deadline"> Deadline</label></div>'+
    '<div class="locrow k-event k-away"><label>Location<input type="text" id="f-loc" list="f-locs" autocomplete="off" placeholder="Place or address"></label><a id="f-map" target="_blank" rel="noopener" hidden>Open in Maps</a><button type="button" class="btn sm travel-btn k-event" id="f-travel" hidden>+ Travel</button></div><datalist id="f-locs">'+knownLocations().map(x=>'<option value="'+esc(x)+'"></option>').join("")+'</datalist>'+
@@ -2074,7 +2096,8 @@ function openEditor(it,occDate){
     sh.querySelectorAll(".kinds button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.k===k));
     sh.querySelectorAll(".k-event,.k-task,.k-away,.k-allday").forEach(el=>{el.hidden=!el.classList.contains("k-"+k)});
     const rep=f("repeat").value!=="0";
-    if(k==="event"){sh.querySelectorAll(".rep").forEach(el=>el.hidden=!rep);sh.querySelectorAll(".norep").forEach(el=>el.hidden=rep)}
+    if(k==="event"){sh.querySelectorAll(".rep").forEach(el=>el.hidden=!rep);sh.querySelectorAll(".norep").forEach(el=>el.hidden=rep);if(rep)sh.querySelector("#f-endLbl").hidden=true}
+    sh.querySelector("#f-endTxt").textContent=k==="event"?"Ends on (later day)":"Until";
   }
   sh.querySelectorAll(".kinds button").forEach(b=>b.onclick=()=>{k=b.dataset.k;sync()});
   f("repeat").onchange=sync;sync();f("travel").hidden=false;syncMap();sh.querySelectorAll(".kinds button").forEach(b=>b.addEventListener("click",syncMap));
@@ -2092,12 +2115,12 @@ function openEditor(it,occDate){
       if(ev){const ds=DOW.map((_,i)=>i+1).filter(i=>sh.querySelector('[name=d'+i+']').checked);
         o.repeat={days:ds.length?ds:[isoDow(o.date)],every:ev,from:f("from").value||(r&&r.from)||o.date,until:f("until").value||undefined,except:(r&&r.except)||[]};
         if(!o.repeat.until)delete o.repeat.until;o.date=undefined}
-      else delete o.replaces}
+      else{delete o.replaces;const ed=f("endDate").value;if(ed&&ed>o.date)o.endDate=ed;else if(!o.marker&&mins(o.end)<mins(o.start))o.endDate=addDays(o.date,1)}}
     if(k==="task"){o.time=f("time").value||undefined;o.deadline=f("deadline").checked||undefined;o.done=it.done||undefined}
     if(k==="away"||k==="allday"){o.endDate=f("endDate").value||undefined;if(k==="away"){o.start=f("start").value;o.end=f("end").value}}
     return o}
   function valid(o){if(!o.title){toast("Add a title first.");return false}if(!o.date&&!o.repeat){toast("Pick a date.");return false}
-    if((o.kind==="event")&&mins(o.end)<=mins(o.start)){toast("End time must be after the start time.");return false}return true}
+    if(o.kind==="event"&&!o.marker&&!o.endDate&&(o.repeat?mins(o.end)===mins(o.start):mins(o.end)<=mins(o.start))){toast("End time must be after the start time.");return false}return true}
   sh.addEventListener("submit",async e=>{e.preventDefault();const o=collect();if(!valid(o))return;const before=isNew?null:snapIt(it);const id=await save(o);if(id){close();pushUndo((isNew?"Added “":"Saved “")+o.title+"”",()=>before?save(before):del("items",id))}});
   const left=sh.querySelector(".actions .left");
     if(!isNew&&kind==="event"&&(it.cat==="meal"||mealOfBlock(it.title))){const pr=h("button",{type:"button",class:"btn primary",text:"Pick a recipe"});
