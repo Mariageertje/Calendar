@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261028135408";
+<script>window.CAL_BUILD="20261028141153";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -56,7 +56,8 @@ let syncing=false,again=false,lastOk=+ls.get("lastok")||0,lastErr="";
 async function syncOnce(){const c=conf();if(!c.token||!c.repo)return status("setup");if(!navigator.onLine)return status("offline");
   const br=c.branch||"main";
   let listing={};const r=await gh("/repos/"+c.repo+"/contents/data?ref="+encodeURIComponent(br));
-  if(r.status===401||r.status===403){throw new Error(r.status===401?"The key is not valid any more. Make a new one.":"The key has no access to "+c.repo+".")}
+  if(r.status===401)throw new Error("GitHub does not accept this key. Paste it again in full, or make a new one.");
+  if(r.status===403||r.status===404&&!(await gh("/repos/"+c.repo)).ok)throw new Error("The key works but has no access to "+c.repo+". Give the key access to that repository (Contents: Read and write).");
   if(r.status===200){for(const f of await r.json())listing[f.name.replace(/\.json$/,"")]=f.sha}else if(r.status!==404)throw new Error("GitHub answered "+r.status);
   for(const coll of COLLS){
     if(listing[coll]&&listing[coll]===shas[coll]&&!dirty[coll].size)continue;
@@ -95,7 +96,8 @@ function el(tag,props,...kids){const e=document.createElement(tag);for(const[k,v
 function openSync(){const c=conf();const ov=el("div",{class:"overlay"});const sh=el("div",{class:"sheet",role:"dialog","aria-label":"Sync"});
   const close=()=>ov.remove();ov.onclick=e=>{if(e.target===ov)close()};
   const repo=el("input",{type:"text",value:c.repo||"",placeholder:"username/calendar-data",autocapitalize:"off",autocomplete:"off",spellcheck:"false"});
-  const tok=el("input",{type:"password",value:c.token||"",placeholder:"github_pat_…",autocomplete:"off"});
+  const tok=el("input",{type:"text",value:c.token||"",placeholder:"github_pat_…",autocomplete:"off",autocorrect:"off",autocapitalize:"off",spellcheck:"false",name:"cal-key-"+Math.random().toString(36).slice(2,6)});
+  const hint=el("p",{class:"why",style:"margin:0;min-height:1.2em"});const check=()=>{const v=tok.value.replace(/\s+/g,"");hint.textContent=!v?"":/^(github_pat_|ghp_)[A-Za-z0-9_]{20,}$/.test(v)?"Key looks complete ("+v.length+" characters).":"This does not look like a whole key: it should start with github_pat_ and be about 93 characters long (now "+v.length+").";hint.style.color=/^(github_pat_|ghp_)[A-Za-z0-9_]{20,}$/.test(v)||!v?"":"var(--danger)"};tok.oninput=check;check();
   const n=pending();
   const info=el("p",{class:"why",text:!c.token?"Paste the key once on each device. Everything stays on this device and syncs with the private repository when there is internet.":(lastErr?"Last error: "+lastErr:"Last sync: "+(lastOk?new Date(lastOk).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"never"))+(n?" · "+n+" changes waiting":"")});
   const help=el("details",{class:"why"},el("summary",{text:"How to make the key"}),el("ol",{},
@@ -104,10 +106,10 @@ function openSync(){const c=conf();const ov=el("div",{class:"overlay"});const sh
     el("li",{text:"Repository access: Only select repositories → calendar-data."}),
     el("li",{text:"Permissions → Repository permissions → Contents: Read and write."}),
     el("li",{text:"Generate, copy the key (starts with github_pat_) and paste it here."})));
-  const save=el("button",{type:"button",class:"btn primary",text:c.token?"Save + sync":"Connect",onclick:async()=>{const nc=Object.assign({},conf(),{repo:repo.value.trim(),token:tok.value.trim()});setConf(nc);lastErr="";close();await sync();if(lastErr)openSync()}});
+  const save=el("button",{type:"button",class:"btn primary",text:c.token?"Save + sync":"Connect",onclick:async()=>{const nc=Object.assign({},conf(),{repo:repo.value.trim(),token:tok.value.replace(/\s+/g,"")});setConf(nc);lastErr="";close();await sync();if(lastErr)openSync()}});
   const now=el("button",{type:"button",class:"btn",text:"Sync now",onclick:async()=>{close();await sync()}});
   const out=c.token?el("button",{type:"button",class:"btn danger",text:"Forget key on this device",onclick:()=>{const nc=conf();delete nc.token;setConf(nc);close();status()}}):null;
-  sh.append(el("h2",{text:"Sync"}),info,el("label",{},"Private repository",repo),el("label",{},"Key",tok),help,el("div",{class:"actions"},el("div",{class:"left"},out),c.token?now:null,el("button",{type:"button",class:"btn",text:"Close",onclick:close}),save));
+  sh.append(el("h2",{text:"Sync"}),info,el("label",{},"Private repository",repo),el("label",{},"Key",tok),hint,help,el("div",{class:"actions"},el("div",{class:"left"},out),c.token?now:null,el("button",{type:"button",class:"btn",text:"Close",onclick:close}),save));
   ov.appendChild(sh);document.body.appendChild(ov)}
 function mount(){const u=document.getElementById("undoBtn");if(!u||document.getElementById("syncBtn"))return;
   const b=el("button",{class:"btn syncbtn",id:"syncBtn",type:"button",onclick:openSync});u.parentNode.insertBefore(b,u);status();

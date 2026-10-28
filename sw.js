@@ -1,5 +1,5 @@
 /* Calendar: keeps the app itself on the device so it opens without internet. Data is handled by the page (local storage + GitHub sync). */
-const V="calendar-20261028135408";
+const V="calendar-20261028141153";
 const CORE=["./","./index.html","./manifest.webmanifest","./icon-192.png","./icon-512.png","./apple-touch-icon.png","./config.js"];
 self.addEventListener("install",e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting()))});
 self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==V).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
