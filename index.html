@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261028144214";
+<script>window.CAL_BUILD="20261028213249";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -670,7 +670,11 @@ async function planFromList(L,it,d,slot,need){
   if(ok&&item){item.date=d;await put("lists",doc)}
   if(ok)toast("Planned: "+DOW[isoDow(d)-1]+" "+fmtShort(d)+(slot?" "+hm(slot.s):""));
   return ok}
-function plannable(){const out=[];for(const L of data.lists.slice().sort((a,b)=>(a.order||0)-(b.order||0))){if(!["todo","buy","ideas"].includes(L.type||"todo"))continue;const its=(L.items||[]).filter(i=>!i.done&&!i.date).sort((x,y)=>(x.by||"9999").localeCompare(y.by||"9999"));if(its.length)out.push({L,its})}return out}
+function onWeekList(li){return !!li.week&&items.some(t=>t.kind==="task"&&t.fromItem===li.id&&!t.done)}
+async function planToWeek(L,it,m){const doc=JSON.parse(JSON.stringify(data.lists.find(x=>x.id===L.id)||L));const item=(doc.items||[]).find(x=>x.id===it.id);
+  const ok=await put("items",{kind:"task",title:(L.type==="buy"?"Buy: ":"")+it.text,notes:"From list: "+L.name+(it.note?" · "+it.note:""),week:m,order:Date.now(),fromList:L.id,fromItem:it.id});
+  if(ok&&item){item.week=m;delete item.date;await put("lists",doc)}return ok}
+function plannable(){const out=[];for(const L of data.lists.slice().sort((a,b)=>(a.order||0)-(b.order||0))){if(!["todo","buy","ideas"].includes(L.type||"todo"))continue;const its=(L.items||[]).filter(i=>!i.done&&!i.date&&!onWeekList(i)).sort((x,y)=>(x.by||"9999").localeCompare(y.by||"9999"));if(its.length)out.push({L,its})}return out}
 function sheetShell(title){const ov=h("div",{class:"overlay"}),sh=h("div",{class:"sheet",role:"dialog","aria-label":title},h("h2",{text:title}));
   const close=()=>{ov.remove();if(needsRender){needsRender=false}render()};ov.onclick=e=>{if(e.target===ov)close()};ov.appendChild(sh);document.body.appendChild(ov);return {ov,sh,close}}
 /* pick items from the lists for one day */
@@ -698,6 +702,9 @@ function openPlanDay(d){
 function openPlanItem(L,it){
   const {sh,close}=sheetShell("When does this fit?");const isBuy=L.type==="buy";
   sh.appendChild(h("p",{style:"margin:0;font-weight:600",text:(isBuy?"Buy: ":"")+it.text}));
+  {const m0=mondayOf(todayStr());sh.appendChild(h("div",{class:"wtday"},h("span",{class:"why",style:"align-self:center",text:"Week list:"}),
+    h("button",{type:"button",class:"btn",text:"This week",onclick:async()=>{if(await planToWeek(L,it,m0))close()}}),
+    h("button",{type:"button",class:"btn",text:"Next week",onclick:async()=>{if(await planToWeek(L,it,addDays(m0,7)))close()}})))}
   const dur=h("input",{type:"text",inputmode:"numeric",value:String(it.mins||DEFAULT_MINS),style:"width:80px"});
   sh.appendChild(h("label",{class:"inline"},"Time needed",dur,"minutes"));
   if(isBuy)sh.appendChild(h("p",{class:"why",text:"Shopping: 9:00–19:00 only."}));
@@ -806,7 +813,7 @@ async function moveTo(it,d,slot){if(dlLocked(it))return false;
   const ok=await save(o);if(ok){await syncListDate(it,d);toast("Moved to "+DOW[isoDow(d)-1]+" "+fmtShort(d)+(o.start&&it.kind==="event"?" "+o.start:""))}return ok}
 async function moveNext(it){const t=todayStr();const from=it.date&&it.date>=t?addDays(it.date,1):(capacity(t).total>=needOf(it)?t:addDays(t,1));const r=nextRoom(it,from);if(!r){toast("No room in the next 4 weeks: pick a date or drop something.");return false}return moveTo(it,r.d,r.f)}
 async function markDone(it){let ok=true;if(it.kind==="task")ok=await save(Object.assign({},it,{done:true}));else ok=true;if(ok){await syncListDate(it,null,true)}return ok}
-async function backToList(it){const r=listItemOf(it);if(!r)return false;if(await del("items",it.id)){const doc=JSON.parse(JSON.stringify(r.L));const li=doc.items.find(x=>x.id===it.fromItem);if(li)delete li.date;await put("lists",doc);toast("Back on the list '"+r.L.name+"'");return true}return false}
+async function backToList(it){const r=listItemOf(it);if(!r)return false;if(await del("items",it.id)){const doc=JSON.parse(JSON.stringify(r.L));const li=doc.items.find(x=>x.id===it.fromItem);if(li){delete li.date;delete li.week}await put("lists",doc);toast("Back on the list '"+r.L.name+"'");return true}return false}
 function moveButtons(it,after){
   const wrap=h("span",{class:"odb"});const go=async f=>{if(await f()&&after)after()};
   const t=todayStr(),tom=addDays(t,1);
@@ -841,7 +848,7 @@ function renderMonth(){
     const rows=[];
     for(const a of spans("away",day).concat(spans("allday",day)))
       rows.push(h("button",{class:"mi ban"+(a.kind==="away"?" away":""),title:a.title+(a.notes?"\n"+a.notes:""),text:a.title,draggable:a.date===day?"true":null,"data-id":a.id,onclick:ev=>{ev.stopPropagation();openEditor(a)}}));
-    const tasks=items.filter(x=>x.kind==="task"&&x.date===day&&!x.done).sort((a,b)=>(b.deadline?1:0)-(a.deadline?1:0)||(a.time||"99").localeCompare(b.time||"99"));
+    const tasks=items.filter(x=>x.kind==="task"&&x.date===day).sort((a,b)=>(a.done?1:0)-(b.done?1:0)||(b.deadline?1:0)-(a.deadline?1:0)||(a.time||"99").localeCompare(b.time||"99"));
     for(const tk of tasks)rows.push(h("button",{class:"mi tk"+(tk.deadline?" dl":"")+(tk.done?" done":""),title:tk.title+(tk.notes?"\n"+tk.notes:""),draggable:lockedDl(tk)?"false":"true","data-id":tk.id,onclick:ev=>{ev.stopPropagation();openEditor(tk)}},(tk.time?h("span",{class:"tm",text:tk.time}):null),tk.title));
     for(const o of eventsOn(day)){
       if(o.it.marker)continue; if(o.isRoutine&&!showRoutine)continue;
@@ -883,9 +890,7 @@ function renderCal(){
   renderOverdue();renderClip();
   if(mode==="month"){const r=document.getElementById("tlrail");if(r)r.hidden=true;renderStrip();renderLegend();renderMonth();return}
   renderStrip();renderWeekbar();renderLegend();
-  const strip=$("daystrip");strip.innerHTML="";
-  for(let i=0;i<7;i++){const d=addDays(m,i);const b=h("button",{"aria-pressed":String(d===cursor),onclick:()=>{cursor=d;render()}},h("span",{text:DOW[i]}),h("b",{text:String(Number(d.slice(8)))}));
-    if(items.some(t=>t.kind==="task"&&t.deadline&&!t.done&&t.date===d))b.classList.add("has-dl");strip.appendChild(b)}
+  renderDaystrip();
   const sc=$("scroller");if(notReady(sc))return;
   if(!document.getElementById("tlrail")){const w=h("div",{class:"scwrap"});sc.parentNode.insertBefore(w,sc);w.appendChild(sc);w.appendChild(h("div",{id:"tlrail",class:"tlrail","aria-hidden":"true"}))}
   const old=sc.querySelector(".grid.cont");let keep=null;
@@ -904,12 +909,12 @@ function renderCal(){
       c.appendChild(h("button",{class:"banner"+(a.kind==="allday"?" allday":""),title:a.notes||"",text:txt,onclick:()=>openEditor(a)}))}
     for(const o of eventsOn(d).filter(o=>o.it._part==="mid")){const it=o.it,c0=CATS[it.cat]?it.cat:"study";c.appendChild(h("button",{class:"banner evmulti"+(it.optional?" opt":""),style:"background:var(--c-"+c0+"-bg);color:var(--c-"+c0+");border-color:transparent",title:it.title,text:"↔ "+it.title,onclick:()=>openEditor(it._src)}))}
     for(const x of subOn(d).filter(x=>x.allDay)){const sb=subById(x.sub);c.appendChild(h("button",{class:"banner sub",style:subStyle(sb),title:(sb&&sb.name)||"",text:x.title,onclick:()=>openSubEvent(x)}))}
-    const tasks=items.filter(x=>x.kind==="task"&&x.date===d&&!x.done).sort((a,b)=>(b.deadline?1:0)-(a.deadline?1:0)||(a.time||"99").localeCompare(b.time||"99"));
+    const tasks=items.filter(x=>x.kind==="task"&&x.date===d).sort((a,b)=>(a.done?1:0)-(b.done?1:0)||(b.deadline?1:0)-(a.deadline?1:0)||(a.time||"99").localeCompare(b.time||"99"));
     for(const tk of tasks){
-      const cb=h("input",{type:"checkbox",id:"cb-"+tk.id,"aria-label":"Done: "+tk.title});cb.checked=!!tk.done;cb.onchange=async()=>{const before=snapIt(tk);if(await save(Object.assign({},tk,{done:cb.checked}))&&cb.checked){await syncListDate(tk,null,true);pushUndo("Done: “"+tk.title+"”",()=>save(before))}};
+      const cb=h("input",{type:"checkbox",id:"cb-"+tk.id,"aria-label":"Done: "+tk.title});cb.checked=!!tk.done;cb.onchange=async()=>{const before=snapIt(tk);const n=Object.assign({},tk,{done:cb.checked});if(!cb.checked)delete n.done;if(await save(n)){if(cb.checked)await syncListDate(tk,null,true);pushUndo((cb.checked?"Done: “":"Not done: “")+tk.title+"”",()=>save(before))}};
       const tt=h("span",{class:"tt",title:tk.notes||"",text:(tk.time?tk.time+" ":"")+tk.title});
       const row=h("div",{class:"task"+(tk.deadline?" dl":"")+(tk.done?" done":""),draggable:"true","data-id":tk.id},cb,tt);tt.onclick=e=>{e.stopPropagation();inlineEdit(tt,tk,row)};
-      row.addEventListener("dragstart",e=>{e.dataTransfer.setData("text/plain",tk.id);e.dataTransfer.effectAllowed="move"});rowGestures(row,{onDel:()=>delItem(tk),onDone:()=>doneItem(tk),drag:tk});c.appendChild(row)}
+      row.addEventListener("dragstart",e=>{e.dataTransfer.setData("text/plain",tk.id);e.dataTransfer.effectAllowed="move"});rowGestures(row,{onDel:()=>delItem(tk),onDone:tk.done?null:()=>doneItem(tk),drag:tk.done?null:tk});c.appendChild(row)}
     c.addEventListener("click",e=>{if(!(e.target===c||e.target.classList.contains("addrow2")))return;if(lastPtr!=="touch")selectSlot(d,null)});
     holdOn(c,e=>e.target===c||e.target.classList.contains("addrow2"),(x,y)=>{if(clip)pasteMenu(x,y,d,null,null)});c.addEventListener("contextmenu",e=>{if(!(e.target===c||e.target.classList.contains("addrow2"))||lastPtr==="touch"||!clip)return;e.preventDefault();pasteMenu(e.clientX,e.clientY,d,null,null)});
     c.addEventListener("dragover",e=>{e.preventDefault();c.classList.add("over")});c.addEventListener("dragleave",()=>c.classList.remove("over"));
@@ -982,8 +987,12 @@ window.__cal={parseQuick:(a,b)=>parseQuick(a,b),get cursor(){return cursor},get 
     if(dragging||document.querySelector(".overlay"))return;const v=visibleInfo();if(!v)return;
     const nc=mode==="day"?v.first:(cursor>=v.first&&cursor<=v.last?cursor:v.first);
     const nearEdge=v.i<7||v.i+v.k>v.n-7;
-    if(nc!==cursor||nearEdge){cursor=nc;shownCursor=nc;render()}},180)},{passive:true});
+    if(nearEdge){cursor=nc;shownCursor=nc;render();return}
+    if(nc!==cursor){const wk=mondayOf(cursor)!==mondayOf(nc);cursor=nc;shownCursor=nc;$("jump").value=cursor;if(wk){renderWeekbar();renderOverdue()}renderDaystrip();updRange()}},160)},{passive:true});
 })();
+function renderDaystrip(){const m=mondayOf(cursor),strip=$("daystrip");if(!strip)return;strip.innerHTML="";
+  for(let i=0;i<7;i++){const d=addDays(m,i);const b=h("button",{"aria-pressed":String(d===cursor),onclick:()=>{cursor=d;render()}},h("span",{text:DOW[i]}),h("b",{text:String(Number(d.slice(8)))}));
+    if(items.some(t=>t.kind==="task"&&t.deadline&&!t.done&&t.date===d))b.classList.add("has-dl");strip.appendChild(b)}}
 function renderStrip(){
   const el=$("strip");el.innerHTML="";const t=todayStr();
   const dl=items.filter(i=>i.kind==="task"&&i.deadline&&!i.done&&i.date>=t).map(x=>({date:x.date,time:x.time,title:x.title,go:()=>{cursor=x.date;render()}}));
@@ -1289,7 +1298,7 @@ function itemRow(it,onToggle,onPlan,onDelete,opts){
   const badges=[];
   if(it.by)badges.push(h("span",{class:"when",style:(!it.done&&dayNum(it.by)-dayNum(t)<=2)?"color:var(--danger)":"",text:"by "+DOW[isoDow(it.by)-1]+" "+fmtShort(it.by)}));
   if(it.mins)badges.push(h("span",{class:"when",style:"color:var(--muted)",text:fmtDur(it.mins)}));
-  if(it.date)badges.push(h("span",{class:"when",text:"planned "+fmtShort(it.date)}));
+  if(it.date)badges.push(h("span",{class:"when",text:"planned "+fmtShort(it.date)}));else if(onWeekList(it))badges.push(h("span",{class:"when",text:"week list "+fmtShort(it.week)}));
   const ops=h("span",{class:"ops"});
   if(onPlan&&opts.planLabel!==null){
     if(opts.onPlanPick)ops.append(h("button",{class:"iconbtn",title:"Find a day with room for it",text:opts.planLabel||"Plan",onclick:opts.onPlanPick}));
@@ -1955,12 +1964,15 @@ document.addEventListener("keydown",e=>{
 document.addEventListener("pointerdown",e=>{if(sel&&!e.target.closest(".ev,.mark,.pop,.overlay,.toast,#undoBtn"))clearSel();if(slot&&!e.target.closest(".col,.ad,#clipbar,.toast,#undoBtn,.overlay"))clearSlot()});
 let slot=null; // a selected empty spot: {d, m} (m=null: the day row, for tasks)
 function clearSlot(){slot=null;document.querySelectorAll(".slotsel").forEach(x=>x.remove());document.querySelectorAll(".ad.slot").forEach(x=>x.classList.remove("slot"))}
-function drawSlot(){document.querySelectorAll(".slotsel").forEach(x=>x.remove());document.querySelectorAll(".ad.slot").forEach(x=>x.classList.remove("slot"));if(!slot||view!=="cal")return;
+function drawSlot(){document.querySelectorAll(".slotsel").forEach(x=>x.remove());document.querySelectorAll(".ad.slot").forEach(x=>x.classList.remove("slot"));return;
   if(slot.m==null){const i=[...document.querySelectorAll(".col")].findIndex(c=>c.dataset.date===slot.d);const ad=document.querySelectorAll(".ad")[i];if(ad)ad.classList.add("slot");return}
   const c=document.querySelector('.col[data-date="'+slot.d+'"]');if(!c)return;const hourPx=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--hour"))||48;
   c.appendChild(h("div",{class:"slotsel",style:"top:"+((slot.m-START_H*60)/60*hourPx)+"px",text:hm(slot.m)+(clip?" · Ctrl/Cmd+V to paste":" · paste or double-click to add")}))}
 function selectSlot(d,m){clearSel();slot={d,m};drawSlot()}
-function pasteTarget(){if(slot)return {d:slot.d,m:slot.m};if(sel)return {d:sel.d,m:sel.it.kind==="event"?mins(sel.it.end):null};return null}
+let hoverPt=null;
+document.addEventListener("mousemove",e=>{const el=e.target.closest&&e.target.closest(".col,.ad");if(!el||!el.dataset.date){hoverPt=null;return}
+  if(el.classList.contains("col")){const r=el.getBoundingClientRect(),hp=hourPxNow();hoverPt={d:el.dataset.date,m:Math.max(START_H*60,Math.min(START_H*60+Math.floor((e.clientY-r.top)/hp*4)*15,23*60+45))}}else hoverPt={d:el.dataset.date,m:null}},{passive:true});
+function pasteTarget(){if(hoverPt&&lastPtr!=="touch")return hoverPt;if(slot)return {d:slot.d,m:slot.m};if(sel)return {d:sel.d,m:sel.it.kind==="event"?mins(sel.it.end):null};return null}
 const blockText=it=>it.title+(it.kind==="event"&&!it.marker?" "+it.start+"–"+it.end:"")+(it.location?" · "+it.location:"");
 let lastCopy={t:0,text:""},pasteHandled=0;
 document.addEventListener("copy",e=>{if(Date.now()-lastCopy.t<600&&lastCopy.text){e.clipboardData.setData("text/plain",lastCopy.text);e.preventDefault()}});
@@ -1973,8 +1985,8 @@ async function pasteTextAt(t,raw){const lines=raw.split(/\r?\n/).map(x=>x.trim()
   if(id)pushUndo("Pasted “"+title+"” · "+DOW[isoDow(t.d)-1]+" "+fmtShort(t.d),()=>del("items",id))}
 document.addEventListener("paste",e=>{const a=document.activeElement;if(a&&a.matches("input,textarea,select,[contenteditable=true]")||document.querySelector(".overlay")||view!=="cal")return;
   const raw=(e.clipboardData&&e.clipboardData.getData("text/plain"))||"";const t=pasteTarget();
-  if(!t){if(clip||raw.trim()){e.preventDefault();toast("Click a spot in the calendar first, then Ctrl/Cmd+V.")}return}
-  e.preventDefault();pasteHandled=Date.now();
+  if(!t){if(clip||raw.trim()){e.preventDefault();toast("Point at a spot in the calendar, then Ctrl/Cmd+V.")}return}
+  e.preventDefault();pasteHandled=Date.now();clearSlot();
   if(clip&&(!raw.trim()||raw.trim()===clip.text))pasteAt(t.d,t.m);else if(raw.trim())pasteTextAt(t,raw)});
 
 /* ---------- drag to move / resize ---------- */
