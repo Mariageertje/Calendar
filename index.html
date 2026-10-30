@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261030183243";
+<script>window.CAL_BUILD="20261030184453";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -405,6 +405,11 @@ input[type=text].ie:focus{outline:none}
 .mdh:nth-child(7n+1),.mc:nth-child(7n+1){border-left:0}
 .mc{min-height:118px;border-left:1px solid var(--line);border-bottom:1px solid var(--line);padding:4px;display:flex;flex-direction:column;gap:2px;min-width:0;cursor:pointer}
 .mc.out{background:var(--bg)}
+.mode-month .scroller{overflow:visible}
+.mdh{position:sticky;top:var(--toph,0px);z-index:3;background:var(--paper)}
+.mc.mtop{box-shadow:inset 0 2px 0 var(--line-strong)}
+.mc.m1{box-shadow:inset 2px 0 0 var(--line-strong),inset 0 2px 0 var(--line-strong)}
+.mc{transition:background-color .2s}
 .mc.out .mnum{color:var(--muted)}
 .mc.today{background:var(--today)}
 .mc.over{box-shadow:inset 0 0 0 2px var(--accent)}
@@ -849,24 +854,13 @@ function overdueItems(){const t=todayStr(),lim=addDays(t,-45);const out=[];
     if(it.kind==="task"&&!it.done)out.push(it);
     else if(it.kind==="event"&&it.fromList){const r=listItemOf(it);if(r&&!r.li.done&&r.li.date===it.date)out.push(it)}}
   return out.sort((a,b)=>a.date.localeCompare(b.date))}
-function renderMonth(){
-  const sc=$("scroller");if(notReady(sc))return;
-  const t=todayStr(), ym=cursor.slice(0,7), first=ym+"-01";
-  const nextFirst=addMonths(first,1), last=addDays(nextFirst,-1);
-  const start=mondayOf(first), end=addDays(mondayOf(last),6);
-  const showRoutine=store("mc.mroutine")==="1";
-  const wrap=h("div",{});
-  const cb=h("input",{type:"checkbox",id:"m-rt"});cb.checked=showRoutine;cb.onchange=()=>{store("mc.mroutine",cb.checked?"1":"0");render()};
-  wrap.appendChild(h("div",{class:"mbar"},h("label",{for:"m-rt"},cb,"Routine too"),h("span",{class:"why",text:"Tap a date to open that day"})));
-  const grid=h("div",{class:"mgrid",role:"grid","aria-label":MONTHS[Number(ym.slice(5))-1]+" "+ym.slice(0,4)});
-  const narrow=window.innerWidth<600, MAX=narrow?2:5;
-  for(const d of DOW)grid.appendChild(h("div",{class:"mdh",text:narrow?d.slice(0,2):d}));
-  const openDay=d=>{cursor=d;mode="day";store("mc.mode",mode);render();setTimeout(scrollToNow,60)};
-  for(let d=start;d<=end;d=addDays(d,1)){
-    const day=d;
-    const cell=h("div",{class:"mc"+(day.slice(0,7)!==ym?" out":"")+(day===t?" today":""),"data-date":day,role:"gridcell"});
+let mWin=null,mGo=null,mFocus=null,mSmooth=false;
+const mOpenDay=d=>{cursor=d;mode="day";store("mc.mode",mode);render();setTimeout(scrollToNow,60)};
+function monthCell(day,t,MAX,narrow,showRoutine){
+  const openDay=mOpenDay;
+    const dn=Number(day.slice(8)),cell=h("div",{class:"mc"+(day.slice(0,7)!==mFocus?" out":"")+(day===t?" today":"")+(dn<=7?" mtop":"")+(dn===1&&isoDow(day)!==1?" m1":""),"data-date":day,role:"gridcell"});
     cell.onclick=e=>{if(e.target===cell)openDay(day)};holdOn(cell,e=>e.target===cell,(x,y)=>{if(clip)pasteMenu(x,y,day,null,null)});cell.addEventListener("contextmenu",e=>{if(e.target!==cell||lastPtr==="touch"||!clip)return;e.preventDefault();pasteMenu(e.clientX,e.clientY,day,null,null)});
-    cell.appendChild(h("button",{class:"mnum","aria-label":"Open "+DOW[isoDow(day)-1]+" "+fmtShort(day),text:String(Number(day.slice(8))),onclick:()=>openDay(day)}));
+    cell.appendChild(h("button",{class:"mnum","aria-label":"Open "+DOW[isoDow(day)-1]+" "+fmtShort(day),text:dn===1?MONTHS[Number(day.slice(5,7))-1].slice(0,3)+" 1":String(dn),onclick:()=>openDay(day)}));
     const rows=[];
     for(const a of spans("away",day).concat(spans("allday",day)))
       rows.push(h("button",{class:"mi ban"+(a.kind==="away"?" away":""),title:a.title+(a.notes?"\n"+a.notes:""),text:a.title,draggable:a.date===day?"true":null,"data-id":a.id,onclick:ev=>{ev.stopPropagation();openEditor(a)}}));
@@ -887,11 +881,66 @@ function renderMonth(){
       const id=e.dataTransfer.getData("text/plain");const it=items.find(x=>x.id===id);if(!it||it.repeat||it.date===day)return;
       const o=Object.assign({},it),shift=dayNum(day)-dayNum(it.date);o.date=day;if(it.endDate)o.endDate=addDays(it.endDate,shift);
       save(o).then(async ok=>{if(ok){await syncListDate(it,day);toast("Moved to "+DOW[isoDow(day)-1]+" "+fmtShort(day))}})});
-    grid.appendChild(cell);
-  }
+  return cell;
+}
+function monthCells(from,to,frag){
+  const t=todayStr(),narrow=window.innerWidth<600,MAX=narrow?2:5,showRoutine=store("mc.mroutine")==="1";
+  for(let d=from;d<=to;d=addDays(d,1))frag.appendChild(monthCell(d,t,MAX,narrow,showRoutine));
+  return frag;
+}
+const mFrom=s=>mondayOf(s), mTo=e=>addDays(mondayOf(addDays(e,-1)),6);
+function renderMonth(){
+  const sc=$("scroller");if(notReady(sc))return;
+  const first=cursor.slice(0,7)+"-01";
+  if(!mWin||first<mWin.s||first>=addMonths(mWin.e,-1)){mWin={s:addMonths(first,-2),e:addMonths(first,6)};if(!mGo)mGo=cursor}
+  if(!mFocus||mGo)mFocus=(mGo||cursor).slice(0,7);
+  const showRoutine=store("mc.mroutine")==="1";
+  const wrap=h("div",{});
+  const cb=h("input",{type:"checkbox",id:"m-rt"});cb.checked=showRoutine;cb.onchange=()=>{store("mc.mroutine",cb.checked?"1":"0");render()};
+  wrap.appendChild(h("div",{class:"mbar"},h("label",{for:"m-rt"},cb,"Routine too"),h("span",{class:"why",text:"Tap a date to open that day"})));
+  const grid=h("div",{class:"mgrid",id:"mgrid",role:"grid","aria-label":"Months"});
+  const narrow=window.innerWidth<600;
+  for(const d of DOW)grid.appendChild(h("div",{class:"mdh",text:narrow?d.slice(0,2):d}));
+  monthCells(mFrom(mWin.s),mTo(mWin.e),grid);
   grid.addEventListener("dragstart",e=>{const b=e.target.closest&&e.target.closest("[data-id]");if(!b)return;e.dataTransfer.setData("text/plain",b.dataset.id);e.dataTransfer.effectAllowed="move"});
   wrap.appendChild(grid);
   sc.innerHTML="";sc.appendChild(wrap);
+  mTopVar();
+  if(mGo){const g=mGo,sm=mSmooth;mGo=null;mSmooth=false;monthScrollTo(g,sm)}
+}
+function mTopH(){const tp=document.querySelector(".top");return tp?(parseFloat(getComputedStyle(tp).top)||0)+tp.offsetHeight:0}
+function mTopVar(){document.documentElement.style.setProperty("--toph",mTopH()+"px")}
+function mHeadH(){const hd=document.querySelector(".mdh");return mTopH()+(hd?hd.offsetHeight:0)}
+function monthScrollTo(d,smooth){
+  const cell=document.querySelector('.mc[data-date="'+d+'"]');if(!cell)return;
+  const isDay=d.slice(8)!=="01"||d===todayStr();
+  const y=cell.getBoundingClientRect().top+window.scrollY-mHeadH()-(isDay?cell.offsetHeight:0)-2;
+  window.scrollTo({top:Math.max(0,y),behavior:smooth?"smooth":"auto"});
+  mFocus=d.slice(0,7);mSyncFocus();
+}
+function monthGo(d,smooth){
+  cursor=d;const f=d.slice(0,7)+"-01";
+  if(mWin&&f>=addMonths(mWin.s,1)&&f<addMonths(mWin.e,-1)&&document.getElementById("mgrid")){monthScrollTo(d,smooth);$("range").textContent=MONTHS[Number(d.slice(5,7))-1]+" "+d.slice(0,4);$("jump").value=cursor;return}
+  mWin=null;mGo=d;mSmooth=false;render();
+}
+function mSyncFocus(){
+  const g=document.getElementById("mgrid");if(!g)return;
+  for(const c of g.querySelectorAll(".mc"))c.classList.toggle("out",c.dataset.date.slice(0,7)!==mFocus);
+}
+let mRaf=0;
+window.addEventListener("scroll",()=>{if(mRaf||view!=="cal"||mode!=="month")return;mRaf=requestAnimationFrame(()=>{mRaf=0;monthOnScroll()})},{passive:true});
+function monthOnScroll(){
+  const g=document.getElementById("mgrid");if(!g||!mWin)return;
+  const r=g.getBoundingClientRect(),top=mHeadH(),vh=window.innerHeight;
+  const rh=(g.children[7]||{}).offsetHeight||80, y=top+rh*1.5, x=r.left+r.width*(3.5/7);
+  const el=document.elementFromPoint(x,y),c=el&&el.closest&&el.closest(".mc[data-date]");
+  if(c){const ym=c.dataset.date.slice(0,7);
+    if(ym!==mFocus){mFocus=ym;mSyncFocus();const t=todayStr();cursor=t.slice(0,7)===ym?t:ym+"-01";
+      $("range").textContent=MONTHS[Number(ym.slice(5))-1]+" "+ym.slice(0,4);$("jump").value=cursor}}
+  if(r.bottom<vh*3){const from=addDays(mTo(mWin.e),1);mWin.e=addMonths(mWin.e,3);g.appendChild(monthCells(from,mTo(mWin.e),document.createDocumentFragment()))}
+  else if(r.top>-vh*2){const to=addDays(mFrom(mWin.s),-1);mWin.s=addMonths(mWin.s,-3);
+    const de=document.documentElement,h0=g.offsetHeight,frag=monthCells(mFrom(mWin.s),to,document.createDocumentFragment());
+    de.style.overflowAnchor="none";g.insertBefore(frag,g.children[7]);window.scrollBy(0,g.offsetHeight-h0);requestAnimationFrame(()=>de.style.overflowAnchor="")}
 }
 const AY_STARTS=["2026-09-14","2027-09-13"];
 function vubWeek(mon){for(const s of AY_STARTS.slice().reverse()){const w=Math.floor((dayNum(mon)-dayNum(s))/7)+1;if(w>=1&&w<=52)return w}return null}
@@ -2253,14 +2302,14 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
 /* ---------- controls ---------- */
 const step=()=>(view==="habits"||mode==="week")?7:1;
 const monthStep=n=>{const f=addMonths(cursor,n);cursor=todayStr().slice(0,7)===f.slice(0,7)?todayStr():f};
-$("prev").onclick=()=>{if(view==="cal"&&mode==="month")monthStep(-1);else cursor=addDays(cursor,-step());render()};
-$("next").onclick=()=>{if(view==="cal"&&mode==="month")monthStep(1);else cursor=addDays(cursor,step());render()};
+$("prev").onclick=()=>{if(view==="cal"&&mode==="month"){monthStep(-1);monthGo(cursor,true);return}else cursor=addDays(cursor,-step());render()};
+$("next").onclick=()=>{if(view==="cal"&&mode==="month"){monthStep(1);monthGo(cursor,true);return}else cursor=addDays(cursor,step());render()};
 $("undoBtn").onclick=()=>doUndo();
-$("today").onclick=()=>{cursor=todayStr();render();if(view==="cal")scrollToNow()};
+$("today").onclick=()=>{if(view==="cal"&&mode==="month"){monthGo(todayStr(),true);return}cursor=todayStr();render();if(view==="cal")scrollToNow()};
 $("jump").addEventListener("click",e=>{try{e.target.showPicker&&e.target.showPicker()}catch(_){}});
-$("jump").onchange=e=>{if(e.target.value){cursor=e.target.value;render()}};
+$("jump").onchange=e=>{if(e.target.value){if(view==="cal"&&mode==="month"){monthGo(e.target.value,false);return}cursor=e.target.value;render()}};
 const vWeek=$("vWeek"),vDay=$("vDay"),vMonth=$("vMonth");
-vMonth.onclick=()=>{mode="month";store("mc.mode",mode);render()};
+vMonth.onclick=()=>{mode="month";store("mc.mode",mode);mGo=cursor;render()};
 vWeek.onclick=()=>{mode="week";store("mc.mode",mode);render()};
 vDay.onclick=()=>{mode="day";store("mc.mode",mode);render()};
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{view=b.dataset.v;store("mc.view",view);render()});
@@ -2269,10 +2318,8 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"&&popEl){popCancel();
 /* ---------- sideways swipe / scroll: previous or next week, day, month ---------- */
 function navStep(dir){
   if(view!=="cal")return;
-  if(mode==="month")monthStep(dir);else cursor=addDays(cursor,dir*step());
-  render();
-  const sc=$("scroller");if(mode!=="month")return;
-  const g=sc.firstElementChild;if(g){g.classList.remove("slide-l","slide-r");void g.offsetWidth;g.classList.add(dir>0?"slide-l":"slide-r")}
+  if(mode==="month"){monthStep(dir);monthGo(cursor,true);return}
+  cursor=addDays(cursor,dir*step());render();
 }
 (function(){
   const sc=$("scroller"),area=$("view-cal");let sx=0,sy=0,sl=0,st=0,on=false,inSc=false;
