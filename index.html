@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261030184453";
+<script>window.CAL_BUILD="20261030185136";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -290,6 +290,11 @@ input[type=text].ie:focus{outline:none}
 .dh .dn{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 .dh .dd{font-family:var(--display);font-size:20px;font-variant-numeric:tabular-nums;line-height:1.1}
 .dh.today .dd{color:var(--accent)}
+input[type=text].intent{display:block;width:100%;border:0;border-radius:0;background:transparent;padding:2px 0 0;margin:0;font-size:12px;font-style:italic;color:var(--muted);text-overflow:ellipsis;min-height:0}
+input[type=text].intent:focus{outline:none;color:var(--ink);font-style:normal;box-shadow:inset 0 -1px 0 var(--accent)}
+.intent::placeholder{color:transparent}
+.dh.today .intent::placeholder,.dh:hover .intent::placeholder,.intent:focus::placeholder{color:var(--muted);opacity:.55}
+@media (pointer:coarse){input[type=text].intent{font-size:16px}}
 .corner{border-bottom:1px solid var(--line);background:var(--paper)}
 .ad{border-left:1px solid var(--line);border-bottom:1px solid var(--line-strong);padding:6px;display:flex;flex-direction:column;gap:4px;min-width:0}
 .ad.today,.col.today{background:var(--today)}
@@ -972,7 +977,7 @@ function renderCal(){
   const colW=mode==="week"?Math.max(118,Math.floor((sc.clientWidth-46)/7)):Math.max(200,sc.clientWidth-46);
   const grid=h("div",{class:"grid cont","data-start":winStart,"data-colw":String(colW),"data-n":String(ds.length),style:"grid-template-columns:46px repeat("+ds.length+","+colW+"px)"});const t=todayStr();
   grid.appendChild(h("div",{class:"corner"}));
-  for(const d of ds){grid.appendChild(h("div",{class:"dh"+(d===t?" today":"")},h("div",{class:"dn",text:DOW[isoDow(d)-1]}),h("div",{class:"dd"},String(Number(d.slice(8)))+" ",h("span",{style:"font-size:12px;font-family:var(--body);color:var(--muted)",text:MON[Number(d.slice(5,7))-1]}))))}
+  for(const d of ds){grid.appendChild(h("div",{class:"dh"+(d===t?" today":"")},h("div",{class:"dn",text:DOW[isoDow(d)-1]}),h("div",{class:"dd"},String(Number(d.slice(8)))+" ",h("span",{style:"font-size:12px;font-family:var(--body);color:var(--muted)",text:MON[Number(d.slice(5,7))-1]})),intentInput(d)))}
   grid.appendChild(h("div",{class:"adlabel",text:"Day"}));
   for(const d of ds){
     const c=h("div",{class:"ad"+(d===t?" today":""),"data-date":d});
@@ -1093,6 +1098,14 @@ function renderLegend(){
 
 /* ---------- week focus bar ---------- */
 let weekTimer=null;
+function intentOf(d){const w=data.weeks.find(x=>x.id==="w"+mondayOf(d));return(w&&w.days&&w.days[d])||""}
+function intentInput(d){
+  const v=intentOf(d),inp=h("input",{type:"text",class:"intent","data-live":"1",placeholder:"Intention",value:v,title:v||"Intention for the day","aria-label":"Intention for "+DOW[isoDow(d)-1]+" "+fmtShort(d),enterkeyhint:"done"});
+  inp.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();inp.blur()}else if(e.key==="Escape"){inp.value=intentOf(d);inp.blur()}e.stopPropagation()});
+  inp.addEventListener("change",()=>{const t=inp.value.trim();if(t===intentOf(d))return;inp.title=t||"Intention for the day";
+    setWeek(mondayOf(d),doc=>{const ds=doc.days||(doc.days={});if(t)ds[d]=t;else delete ds[d]})});
+  return inp;
+}
 function weekDoc(m){return data.weeks.find(w=>w.id==="w"+m)||{id:"w"+m,pri:[{t:""},{t:""},{t:""}]}}
 function queueWeek(doc){clearTimeout(weekTimer);weekTimer=setTimeout(()=>put("weeks",doc),700)}
 function setWeek(m,fn){const doc=JSON.parse(JSON.stringify(weekDoc(m)));while((doc.pri||(doc.pri=[])).length<3)doc.pri.push({t:""});fn(doc);return put("weeks",doc)}
