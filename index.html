@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261028213249";
+<script>window.CAL_BUILD="20261030181129";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -1546,7 +1546,7 @@ function taskNeed(it){const r=listItemOf(it);if(r&&r.li.mins)return r.li.mins;if
 function guessCat(t){t=(t||"").toLowerCase().trim();const w=t.split(/[\s:·,]+/)[0]||"";
   const same=items.find(x=>x.kind==="event"&&x.cat&&x.title&&x.title.toLowerCase().trim()===t);if(same)return same.cat;
   const R=[["travel",/^(fiets|bike|trein|train|tram|bus|metro|walk to|wandel naar|drive|rij |travel|reis|onderweg)/],["meal",/\b(eet|eten|lunch|dinner|diner|avondeten|ontbijt|breakfast|brunch|snack|kook|koken|cook)/],
-    ["sport",/\b(gym|run|lopen|loop|yoga|sport|danc|dans|zwem|swim|boulder|klim|stretch|core|hiit|fitness)/],["social",/\b(friend|vriend|party|feest|koffie|coffee|drinks|afspraak met|visit|bezoek|birthday|verjaardag|date)/],
+    ["sport",/\b(gym|run|lopen|loop|yoga|sport|danc|dans|zwem|swim|boulder|klim|stretch|core|hiit|fitness)/],["social",/\b(concert|festival|film|movie|expo|museum|voorstelling|friend|vriend|party|feest|koffie|coffee|drinks|afspraak met|visit|bezoek|birthday|verjaardag|date)/],
     ["creative",/\b(teken|draw|art|paint|schilder|hout|wood|choir|koor|theat|craft|knutsel|music|muziek|sing|zing|kaart|atelier)/],
     ["chores",/\b(mail|bel |bellen|call|admin|wassen|laundry|boodschap|shop|buy:|koop|kuis|clean|opruim|tidy|pack|inpak|bank|verzeker|insurance|formulier|form)/],
     ["rest",/\b(rust|rest|nap|dutje|medit)/],["study",/\b(lees|lezen|read|stud|paper|essay|tekst|text|samenvat|summar|schrijf|write|duoles|opdracht|assignment|exam|leer|learn|zotero|bron|les |college|werkcollege)/]];
@@ -1649,6 +1649,7 @@ function parseQuick(raw,ctx){ctx=ctx||{};let s=" "+(raw||"").replace(/\s+/g," ")
   const cut=(re,fn)=>{const g=new RegExp(re.source,re.flags.includes("g")?re.flags:re.flags+"g");let m;while((m=g.exec(s))){if(fn(m)!==false){s=s.slice(0,m.index)+" "+s.slice(m.index+m[0].length);return true}g.lastIndex=m.index+1}return false};
   const H=(h0,m0,ap)=>{let x=+h0;if(ap){ap=ap.toLowerCase();if(ap==="pm"&&x<12)x+=12;if(ap==="am"&&x===12)x=0}return x*60+(+m0||0)};
   cut(/@\s*([^@]+?)\s*$/,m=>{loc=m[1].trim()});
+  let maybe=false;cut(/\s\?(?=\s)/,()=>{maybe=true});cut(/\s(misschien|eventueel|optioneel|maybe|optional)(?=\s)/i,()=>{maybe=true});
   cut(/\s!(?=\s)/,()=>{deadline=true});cut(/\sdeadline(?=\s)/i,()=>{deadline=true});
   // day words
   cut(/\s(overmorgen|day after tomorrow)(?=\s)/i,()=>{date=addDays(t,2)});
@@ -1690,10 +1691,10 @@ function parseQuick(raw,ctx){ctx=ctx||{};let s=" "+(raw||"").replace(/\s+/g," ")
   if(title)title=title[0].toUpperCase()+title.slice(1);
   if(start==null&&ctx.start&&!dur){start=mins(ctx.start);end=mins(ctx.end)}else if(start==null&&ctx.start&&dur){start=mins(ctx.start)}
   if(start!=null){const d0=date||ctx.date||t,E=end!=null?end:start+(dur||60);const o={kind:"event",title,date:d0,start:hm(start),end:hm(E%1440),cat:guessCat(title)};
-    if(E>1440)o.endDate=addDays(d0,Math.floor(E/1440));else if(E===1440)o.end="23:59";if(loc)o.location=loc;return o}
+    if(E>1440)o.endDate=addDays(d0,Math.floor(E/1440));else if(E===1440)o.end="23:59";if(loc)o.location=loc;if(maybe)o.optional=true;return o}
   const o={kind:"task",title};if(week&&!date){o.week=week;o.order=Date.now()}else o.date=date||ctx.date||t;if(deadline)o.deadline=true;if(dur)o.mins=dur;if(loc)o.notes="@ "+loc;return o}
 function describeQuick(o){const d=o.date?(o.date===todayStr()?"Today":o.date===addDays(todayStr(),1)?"Tomorrow":DOW[isoDow(o.date)-1]+" "+fmtShort(o.date)):"";
-  if(o.kind==="event")return ["Block",d,o.start+"–"+(o.endDate?DOW[isoDow(o.endDate)-1]+" "+o.end:o.end),o.location,CATS[o.cat]].filter(Boolean).join(" · ");
+  if(o.kind==="event")return [o.optional?"Maybe":"Block",d,o.start+"–"+(o.endDate?DOW[isoDow(o.endDate)-1]+" "+o.end:o.end),o.location,CATS[o.cat]].filter(Boolean).join(" · ");
   return ["Task",o.week?"week of "+fmtShort(o.week):d,o.deadline?"deadline":"",o.mins?fmtDur(o.mins):""].filter(Boolean).join(" · ")}
 function openQuick(ctx){ctx=ctx||{};
   const {ov,sh,close}=sheetShell("New");
@@ -1701,7 +1702,7 @@ function openQuick(ctx){ctx=ctx||{};
   const pv=h("p",{class:"q-pv","aria-live":"polite"});
   const more=h("button",{type:"button",class:"btn",text:"More options"}),add=h("button",{type:"button",class:"btn primary",text:"Add"});
   const left=h("div",{class:"left"},more);if(ctx.date)left.appendChild(h("button",{type:"button",class:"btn",text:"From lists",onclick:()=>{ov.remove();openPlanDay(ctx.date)}}));
-  sh.append(inp,pv,h("p",{class:"why q-help",text:"Day, time, length and place in plain words: morgen 9u · vr 14:00–15:30 · 12 nov · 45 min · volgende week · @place · ! = deadline. No time = a task."}),h("div",{class:"actions"},left,h("button",{type:"button",class:"btn",text:"Cancel",onclick:close}),add));
+  sh.append(inp,pv,h("p",{class:"why q-help",text:"Day, time, length and place in plain words: morgen 9u · vr 14:00–15:30 · 12 nov · 45 min · volgende week · @place · ! = deadline · ? or misschien = maybe. No time = a task."}),h("div",{class:"actions"},left,h("button",{type:"button",class:"btn",text:"Cancel",onclick:close}),add));
   const cur=()=>parseQuick(inp.value,ctx);
   const draw=()=>{const o=cur();pv.textContent=describeQuick(o)};inp.oninput=draw;draw();
   const go=async()=>{const o=cur();if(!o.title){inp.focus();return}const id=await save(o);if(id){close();pushUndo("Added “"+o.title+"”",()=>del("items",id))}};
@@ -1901,14 +1902,15 @@ function closePop(){if(popEl){popEl.remove();popEl=null}popOpt=null;document.rem
 function popScroll(){if(!(popOpt&&popOpt.onOutside))closePop()}
 function popOutside(e){if(popEl&&!popEl.contains(e.target)){const f=popOpt&&popOpt.onOutside;closePop();if(f)f()}}
 function popCancel(){const f=popOpt&&popOpt.onCancel;closePop();if(f)f()}
-function popMenu(x,y,acts,opt){closePop();const m=h("div",{class:"pop"+(acts.filter(Boolean).length>3?" vert":""),role:"menu"});
+function popMenu(x,y,acts,opt){closePop();const m=h("div",{class:"pop"+(acts.filter(Boolean).length>4?" vert":""),role:"menu"});
   for(const a of acts.filter(Boolean))m.appendChild(h("button",{type:"button",class:"pop-b"+(a[2]?" "+a[2]:""),role:"menuitem",text:a[0],onclick:e=>{e.stopPropagation();closePop();a[1]()}}));
   document.body.appendChild(m);const r=m.getBoundingClientRect();
   m.style.left=Math.max(8,Math.min(x-r.width/2,innerWidth-r.width-8))+"px";let T=y-r.height-16;if(T<8)T=y+20;T=Math.max(8,Math.min(T,innerHeight-r.height-8));m.style.top=T+"px";popEl=m;popOpt=opt||null;
   setTimeout(()=>{document.addEventListener("pointerdown",popOutside,true);window.addEventListener("scroll",popScroll,true)},0)}
 function blockMenu(it,d,isRoutine,el,x,y){selectBlock(it,d,isRoutine,el);
   const re=()=>{sel={it,d,isRoutine}};
-  popMenu(x,y,[["Copy",()=>{copyItem(it);clearSel()}],lockedDl(it)?null:["Cut",()=>{copyItem(it);clip.cut=true;re();deleteSel()}],lockedDl(it)?null:["Delete",()=>{re();setTimeout(deleteSel,0)},"danger"]])}
+  const src=it._src||it,maybe=it.kind==="event"&&!it.marker?[src.optional?"Sure":"Maybe",async()=>{clearSel();const before=snapIt(src);const n=Object.assign({},src);if(src.optional)delete n.optional;else n.optional=true;if(await save(n))pushUndo((src.optional?"Sure: “":"Maybe: “")+src.title+"”",()=>save(before))}]:null;
+  popMenu(x,y,[["Copy",()=>{copyItem(it);clearSel()}],lockedDl(it)?null:["Cut",()=>{copyItem(it);clip.cut=true;re();deleteSel()}],maybe,lockedDl(it)?null:["Delete",()=>{re();setTimeout(deleteSel,0)},"danger"]])}
 function pasteMenu(x,y,d,m,extra){if(!clip){extra&&extra[1]();return}popMenu(x,y,[["Paste",()=>pasteAt(d,clip.it.kind==="event"?m:null)],extra])}
 function holdOn(el,ok,fn){el.addEventListener("pointerdown",e=>{if(e.pointerType!=="touch"||!ok(e))return;const x0=e.clientX,y0=e.clientY;let t=setTimeout(()=>{t=null;try{navigator.vibrate&&navigator.vibrate(15)}catch(_){}fn(x0,y0)},HOLD_MS);
   const stop=ev=>{if(t){clearTimeout(t);t=null}else if(ev&&ev.type==="pointerup")swallowUntil=Date.now()+400;document.removeEventListener("pointermove",mv);document.removeEventListener("pointerup",stop);document.removeEventListener("pointercancel",stop)};
@@ -2091,7 +2093,7 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
    '<div class="k-event"><label>Repeat<select id="f-repeat"><option value="0">Doesn\'t repeat</option><option value="1">Every week</option><option value="2">Every other week</option></select></label></div>'+
    '<div class="k-event rep"><div class="days">'+dayBoxes+'</div></div>'+
    '<div class="row k-event rep"><label>Repeat from<input type="date" id="f-from"></label><label>Repeat until<input type="date" id="f-until"></label></div>'+
-   '<div class="k-event"><label class="inline"><input type="checkbox" id="f-optional"> Optional (shown dashed)</label></div>'+
+   '<div class="k-event"><label class="inline"><input type="checkbox" id="f-optional"> Maybe (see-through, does not block time)</label></div>'+
    '<div class="k-event"><label class="inline"><input type="checkbox" id="f-marker"> Time mark only (no duration, e.g. lights out)</label></div>'+
    '<div class="k-event"><label class="inline"><input type="checkbox" id="f-flex"> Flexible time: tasks from my lists may go here</label></div>'+
    '<label>Notes<textarea id="f-notes"></textarea></label>'+
