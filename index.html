@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261030181508";
+<script>window.CAL_BUILD="20261030182356";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -194,6 +194,9 @@ h1{font-family:var(--display);font-weight:400;font-size:22px;margin:0;letter-spa
 .swipe.swiping .sw-done{transition:none}
 .lifted{opacity:.4}
 .tdrag{max-width:70vw;overflow:hidden;text-overflow:ellipsis}
+.trv{position:absolute;box-sizing:border-box;border:1.5px dashed currentColor;border-bottom:0;border-radius:5px 5px 0 0;background-image:repeating-linear-gradient(135deg,transparent 0 5px,color-mix(in srgb,currentColor 12%,transparent) 5px 10px);opacity:.75;font-size:10.5px;font-weight:600;padding:0 5px;overflow:hidden;white-space:nowrap;pointer-events:none;z-index:1}
+.trv.after{border-top:0;border-bottom:1.5px dashed currentColor;border-radius:0 0 5px 5px}
+.trv span{line-height:1;font-size:10px;display:block;padding-top:1px}
 .ev.ghost{pointer-events:none;background:var(--accent);color:var(--accent-ink);opacity:.88;z-index:7;border-radius:6px}
 .ev.ghost .t{font-weight:600}
 input[type=text].ie{border:0;border-bottom:1px solid var(--accent);background:transparent;padding:0 0 1px;font:inherit;flex:1;min-width:0;border-radius:0;width:auto;color:inherit}
@@ -229,7 +232,8 @@ input[type=text].ie:focus{outline:none}
 .swatches{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
 .swatches button{width:28px;height:28px;border-radius:50%;border:2px solid transparent;min-height:0;padding:0;cursor:pointer}
 .swatches button[aria-checked="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 2px var(--paper)}
-.travel-btn{align-self:end}
+.trvrow{margin-top:2px}.trvf{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}.trvf label{flex:0 1 88px}.trvf label:nth-child(3){flex-basis:120px}
+#f-tinfo input{width:auto;flex:1;min-width:200px;margin-right:6px}#f-tinfo{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .swipe{position:relative;overflow:hidden;touch-action:pan-y}
 .swipe>*:not(.sw-del):not(.sw-done){transform:translateX(var(--sx,0px));transition:transform .22s ease}
 .swipe.swiping>*:not(.sw-del):not(.sw-done){transition:none}
@@ -651,7 +655,7 @@ function capacity(d){
   const end=Math.min(mk?mins(mk.it.start):DAY_END_DEFAULT,LATEST_END); // nothing from the lists after 21:30: evenings stay for winding down
   const hard=ev.filter(o=>!o.it.marker&&!o.it.optional&&!o.it.flex);
   const flex=ev.filter(o=>!o.it.marker&&o.it.flex);
-  const busy=hard.concat(flex).map(o=>[mins(o.it.start),mins(o.it.end)]);
+  const busy=hard.concat(flex).map(o=>[spanS(o),spanE(o)]);
   for(const a of spans("away",d)){busy.push([a.date===d&&a.start?mins(a.start):0,(a.endDate||a.date)===d&&a.end?mins(a.end):1440])}
   for(const b of subBusyOn(d))busy.push(b);
   busy.sort((a,b)=>a[0]-b[0]);
@@ -775,10 +779,14 @@ function eventsOn(date,all){
   if(linked.some(o=>o.it.cat==="class")&&classReplaced(date))linked=linked.filter(o=>o.it.cat!=="class");
   return linked.concat(fixed).filter(o=>all||!hidden.has(o.it.cat)).sort((a,b)=>mins(a.it.start)-mins(b.it.start)||mins(b.it.end)-mins(a.it.end));
 }
+const trvB=it=>(it._part==="last"||it._part==="mid")?0:(+(it._src||it).travelBefore||0);
+const trvA=it=>(it._part==="first"||it._part==="mid")?0:(+(it._src||it).travelAfter||0);
+const spanS=o=>mins(o.it.start)-trvB(o.it),spanE=o=>mins(o.it.end)+trvA(o.it);
 function layout(list){
+  list=list.slice().sort((a,b)=>spanS(a)-spanS(b)||spanE(b)-spanE(a));
   let cluster=[], clusterEnd=-1, out=[];
-  const flush=()=>{const cols=[];for(const o of cluster){let c=0;while(cols[c]!==undefined&&cols[c]>mins(o.it.start))c++;cols[c]=mins(o.it.end);o.col=c}const n=cols.length;cluster.forEach(o=>o.ncol=n);out=out.concat(cluster);cluster=[]};
-  for(const o of list){if(cluster.length&&mins(o.it.start)>=clusterEnd){flush();clusterEnd=-1}cluster.push(o);clusterEnd=Math.max(clusterEnd,mins(o.it.end))}
+  const flush=()=>{const cols=[];for(const o of cluster){let c=0;while(cols[c]!==undefined&&cols[c]>spanS(o))c++;cols[c]=spanE(o);o.col=c}const n=cols.length;cluster.forEach(o=>o.ncol=n);out=out.concat(cluster);cluster=[]};
+  for(const o of list){if(cluster.length&&spanS(o)>=clusterEnd){flush();clusterEnd=-1}cluster.push(o);clusterEnd=Math.max(clusterEnd,spanE(o))}
   flush();return out;
 }
 
@@ -982,6 +990,10 @@ function renderCal(){
       const c=CATS[it.cat]?it.cat:"study";
       const b=h("button",{class:"ev"+(o.isRoutine?" routine":"")+(it.optional?" opt":"")+(ht<34?" short":""),style:"top:"+top+"px;height:"+ht+"px;left:calc("+(o.col/o.ncol*100)+"% + 3px);width:calc("+(100/o.ncol)+"% - 6px);background:var(--c-"+c+"-bg);color:var(--c-"+c+")",title:it.title+" · "+it.start+"–"+it.end+(it.location?"\n"+it.location:"")+(it.notes?"\n"+it.notes:"")+(o.isRoutine?"\n(routine)":"")},
         h("span",{class:"t",text:it.title}),h("span",{class:"tm",text:(ht<34?" ":"")+(it._src?(it._part==="first"?it.start+" → "+DOW[isoDow(it._src.endDate||addDays(d,1))-1]+" "+it._src.end:"→ "+it._src.end):it.start+"–"+it.end)}),(it.location&&ht>=46?h("span",{class:"loc",text:it.location}):null),h("span",{class:"rzt","aria-hidden":"true",title:"Drag to change the start time"}),h("span",{class:"rz","aria-hidden":"true",title:"Drag to change the end time"}));
+      b._trv=[];const pos="left:calc("+(o.col/o.ncol*100)+"% + 3px);width:calc("+(100/o.ncol)+"% - 6px);color:var(--c-"+c+")";const src0=it._src||it,ic=TRV_ICON[src0.travelMode||"ebike"]||"";
+      const tb=trvB(it),ta=trvA(it);
+      if(tb){const tr=h("div",{class:"trv",style:pos+";top:"+((mins(it.start)-tb-START_H*60)/60*hourPx)+"px;height:"+Math.max(tb/60*hourPx-1,6)+"px",title:"Travel "+tb+" min"},tb/60*hourPx>=9?h("span",{text:ic+" "+tb+" min"}):null);tr._off=-tb;tr._len=tb;col.appendChild(tr);b._trv.push(tr)}
+      if(ta){const tr=h("div",{class:"trv after",style:pos+";top:"+((mins(it.end)-START_H*60)/60*hourPx+1)+"px;height:"+Math.max(ta/60*hourPx-1,6)+"px",title:"Travel back "+ta+" min"},ta/60*hourPx>=9?h("span",{text:ic+" "+ta+" min"}):null);tr._off="end";tr._len=ta;col.appendChild(tr);b._trv.push(tr)}
       b.onclick=ev=>{ev.stopPropagation();if(ev.detail===0||o.noDrag)openEditor(it,o.isRoutine?d:null)};if(!o.noDrag)attachDrag(b,o,d,hourPx,false);if(sel&&sel.k===selKey(it,d)){b.classList.add("sel");sel.it=it}col.appendChild(b)}
     if(d===t&&nowM>=START_H*60)col.appendChild(h("div",{class:"nowline",style:"top:"+(nowM-START_H*60)/60*hourPx+"px"}));
     grid.appendChild(col)}
@@ -1771,6 +1783,26 @@ function setHour(px,anchor){px=Math.round(Math.max(24,Math.min(140,px)));if(Math
 })();
 
 /* ---------- travel time before / after a block with a place ---------- */
+const TRV_ICON={ebike:"🚲",bike:"🚲",walk:"🚶",car:"🚗",transit:"🚆"};
+function travelHome(){return (cfg("travel").home||"").trim()}
+function travelNeighbours(id,date,st,en){let from=null,to=null,fe=-1,ts=1e9; // the block before / after on the same day that has a place
+  for(const o of eventsOn(date,true)){const x=o.it._src||o.it;if(x.id===id||!x.location||o.it.marker)continue;const s0=mins(o.it.start),e0=mins(o.it.end);
+    if(e0<=st&&st-e0<=180&&e0>fe){fe=e0;from=x.location}if(s0>=en&&s0-en<=180&&s0<ts){ts=s0;to=x.location}}
+  for(const x of subOn(date)){if(!x.location||x.allDay)continue;const s0=mins(x.start),e0=mins(x.end);if(e0<=st&&st-e0<=180&&e0>fe){fe=e0;from=x.location.split(" · ")[0]+", VUB"}if(s0>=en&&s0-en<=180&&s0<ts){ts=s0;to=x.location.split(" · ")[0]+", VUB"}}
+  return {from,to}}
+async function geocode(q){q=String(q||"").trim();if(!q)return null;const key="mc.geo:"+q.toLowerCase();try{const c=store(key);if(c)return JSON.parse(c)}catch(_){}
+  const parts=q.split(/\s*[,·]\s*/).filter(Boolean);const tries=[];
+  const add=x=>{x=x.replace(/\bVUB\b/i,"Pleinlaan 2, 1050 Elsene").trim();if(x&&!tries.includes(x))tries.push(x)};
+  add(q);if(/\bVUB\b/i.test(q))add("Pleinlaan 2, 1050 Elsene");for(let i=1;i<parts.length;i++)add(parts.slice(i).join(", "));add(q+", Brussel");
+  for(const t of tries){const r=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=be,nl,fr,it,de&accept-language=nl&q="+encodeURIComponent(t));if(!r.ok)continue;const j=await r.json();
+    if(j&&j[0]){const v=[+j[0].lon,+j[0].lat];store(key,JSON.stringify(v));return v}}
+  return null}
+async function travelMinutes(from,to,mode){const a=await geocode(from),b=await geocode(to);if(!a||!b)return null;
+  if(Math.abs(a[0]-b[0])<1e-4&&Math.abs(a[1]-b[1])<1e-4)return 0;
+  const prof=mode==="walk"?"routed-foot":mode==="car"?"routed-car":"routed-bike";
+  const r=await fetch("https://routing.openstreetmap.de/"+prof+"/route/v1/driving/"+a.join(",")+";"+b.join(",")+"?overview=false");if(!r.ok)throw new Error("route");
+  const j=await r.json();if(!j.routes||!j.routes[0])return null;let m=j.routes[0].duration/60;if(mode==="ebike")m*=0.75;if(mode==="car")m+=5;
+  return Math.max(5,Math.ceil(m/5)*5)}
 const TRAVEL_RE=/^(bike|cycle|walk|train|tram|bus|metro|drive|travel|onderweg|fiets|trein|wandel|rij|reis)/i;
 function travelOptions(loc){const L=(loc||"").trim().toLowerCase();const there=new Map(),back=new Map();
   const evs=items.filter(x=>x.kind==="event");
@@ -2060,6 +2092,7 @@ function attachDrag(el,o,d,hourPx,isMarker){
       else{const len=e0-s0;ns=Math.max(START_H*60,Math.min(snap(s0+raw),1439-len));ne=ns+len;
         if(mode==="week")for(const c of cols){const r=c.getBoundingClientRect();if(ev.clientX>=r.left&&ev.clientX<r.right){if(c.dataset.date!==newDate){newDate=c.dataset.date;el.style.left="3px";el.style.width="calc(100% - 6px)";c.appendChild(el)}break}}}
       el.style.top=(ns-START_H*60)/60*hourPx+"px";
+      for(const tr of (el._trv||[])){tr.style.top=((tr._off==="end"?ne:ns+tr._off)-START_H*60)/60*hourPx+(tr._off==="end"?1:0)+"px";if(tr.parentNode!==el.parentNode){tr.style.left=el.style.left;tr.style.width=el.style.width;el.parentNode.appendChild(tr)}}
       if(!isMarker){el.style.height=Math.max((ne-ns)/60*hourPx-2,16)+"px";if(label)label.textContent=" "+hm(ns)+"–"+hm(ne)}
       else if(label)label.textContent="☾ "+it.title+" "+hm(ns);
       if(!tip){tip=h("div",{class:"dragtip"});document.body.appendChild(tip)}
@@ -2127,7 +2160,8 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
      '<label class="k-event k-away k-allday" id="f-endLbl"><span id="f-endTxt">Until</span><input type="date" id="f-endDate"></label></div>'+
    '<div class="row k-event k-away"><label>Start<input type="time" id="f-start" step="60"></label><label>End<input type="time" id="f-end" step="60"></label></div>'+
    '<div class="row k-task"><label>Time (optional)<input type="time" id="f-time" step="60"></label><label class="inline" style="align-self:end"><input type="checkbox" id="f-deadline"> Deadline</label><label class="inline" style="align-self:end"><input type="checkbox" id="f-uni"> University</label></div>'+
-   '<div class="locrow k-event k-away"><label>Location<input type="text" id="f-loc" list="f-locs" autocomplete="off" placeholder="Place or address"></label><a id="f-map" target="_blank" rel="noopener" hidden>Open in Maps</a><button type="button" class="btn sm travel-btn k-event" id="f-travel" hidden>+ Travel</button></div><datalist id="f-locs">'+knownLocations().map(x=>'<option value="'+esc(x)+'"></option>').join("")+'</datalist>'+
+   '<div class="locrow k-event k-away"><label>Location<input type="text" id="f-loc" list="f-locs" autocomplete="off" placeholder="Place or address"></label><a id="f-map" target="_blank" rel="noopener" hidden>Open in Maps</a></div>'+
+   '<div class="k-event trvrow"><span class="wk-label">Travel time</span><div class="trvf"><label>Before<input type="number" id="f-tb" min="0" step="5" inputmode="numeric" placeholder="0"></label><label>After<input type="number" id="f-ta" min="0" step="5" inputmode="numeric" placeholder="0"></label><label>By<select id="f-tm"><option value="ebike">E-bike</option><option value="bike">Bike</option><option value="walk">Walk</option><option value="car">Car</option><option value="transit">Train / tram</option></select></label><button type="button" class="btn sm" id="f-tcalc">Calculate</button></div><p class="why" id="f-tinfo" style="margin:2px 0 0"></p></div><datalist id="f-locs">'+knownLocations().map(x=>'<option value="'+esc(x)+'"></option>').join("")+'</datalist>'+
    '<label class="k-event">Category<select id="f-cat">'+catOpts+'</select></label>'+
    '<div class="k-event"><label>Repeat<select id="f-repeat"><option value="0">Doesn\'t repeat</option><option value="1">Every week</option><option value="2">Every other week</option></select></label></div>'+
    '<div class="k-event rep"><div class="days">'+dayBoxes+'</div></div>'+
@@ -2144,7 +2178,7 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
   f("title").value=it.title||"";f("date").value=occDate||it.date||cursor;f("endDate").value=it.endDate||"";
   f("start").value=it.start||"09:00";f("end").value=it.end||"10:00";f("time").value=it.time||"";f("deadline").checked=!!it.deadline;f("uni").checked=isUni(Object.assign({kind:"task"},it));
   f("repeat").value=r?String(r.every||1):"0";f("from").value=r?(r.from||""):"";f("until").value=r?(r.until||""):"";
-  f("loc").value=it.location||"";const syncMap=()=>{const v=f("loc").value.trim();const a=sh.querySelector("#f-map");a.hidden=!v;if(v)a.href="https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(v);f("travel").style.display=v&&k==="event"&&!f("marker").checked?"":"none"};f("loc").addEventListener("input",syncMap);syncMap();f("optional").checked=!!it.optional;f("marker").checked=!!it.marker;f("flex").checked=!!it.flex;f("notes").value=it.notes||"";
+  f("loc").value=it.location||"";const syncMap=()=>{const v=f("loc").value.trim();const a=sh.querySelector("#f-map");a.hidden=!v;if(v)a.href="https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(v)};f("loc").addEventListener("input",syncMap);syncMap();f("optional").checked=!!it.optional;f("marker").checked=!!it.marker;f("flex").checked=!!it.flex;f("notes").value=it.notes||"";
   function sync(){
     sh.querySelectorAll(".kinds button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.k===k));
     sh.querySelectorAll(".k-event,.k-task,.k-away,.k-allday").forEach(el=>{el.hidden=!el.classList.contains("k-"+k)});
@@ -2153,9 +2187,18 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
     sh.querySelector("#f-endTxt").textContent=k==="event"?"Ends on (later day)":"Until";
   }
   sh.querySelectorAll(".kinds button").forEach(b=>b.onclick=()=>{k=b.dataset.k;sync()});
-  f("repeat").onchange=sync;sync();f("travel").hidden=false;syncMap();sh.querySelectorAll(".kinds button").forEach(b=>b.addEventListener("click",syncMap));
-  f("travel").onclick=e=>{const o=collect();if(!valid(o))return;const r0=e.currentTarget.getBoundingClientRect();
-    popMenu(r0.left+r0.width/2,r0.top,travelOptions(o.location).map(x=>[(x.dir>0?"→ ":"← ")+x.title+" · "+x.dur+" min",async()=>{const id=await save(o);if(!id)return;await addTravel(Object.assign({},o,{id}),x);ov.remove();needsRender=false;render()}]))};
+  f("repeat").onchange=sync;sync();syncMap();sh.querySelectorAll(".kinds button").forEach(b=>b.addEventListener("click",syncMap));
+  f("tb").value=it.travelBefore||"";f("ta").value=it.travelAfter||"";f("tm").value=it.travelMode||"ebike";
+  f("tcalc").onclick=async()=>{const info=sh.querySelector("#f-tinfo");const dest=f("loc").value.trim();if(!dest){info.textContent="Add a location first.";return}
+    const mode=f("tm").value;if(mode==="transit"){info.innerHTML="";info.append("Train / tram can't be calculated here: ",h("a",{href:"https://www.google.com/maps/dir/?api=1&travelmode=transit&destination="+encodeURIComponent(dest),target:"_blank",rel:"noopener",text:"check it in Maps"})," and fill in the minutes.");return}
+    const home=travelHome();if(!home){const inp=h("input",{type:"text",placeholder:"Home address (start point), e.g. street + number, Elsene"});const ok=h("button",{type:"button",class:"btn sm",text:"Save",onclick:async()=>{if(inp.value.trim()){await setCfg("travel",{home:inp.value.trim()});f("tcalc").click()}}});info.innerHTML="";info.append(inp,ok);inp.focus();return}
+    const date=f("date").value,st=mins(f("start").value),en=mins(f("end").value);const near=travelNeighbours(it.id,date,st,en);
+    info.textContent="Calculating…";
+    try{const a=await travelMinutes(near.from||home,dest,mode),b=await travelMinutes(dest,near.to||home,mode);
+      if(a==null&&b==null){info.textContent="Couldn't find this place on the map. Fill in the minutes yourself.";return}
+      if(a!=null)f("tb").value=a;if(b!=null)f("ta").value=b;
+      info.textContent="From "+(near.from||"home")+" · back to "+(near.to||"home")+" · "+f("tm").selectedOptions[0].text.toLowerCase()+" (OpenStreetMap)"}
+    catch(e){info.textContent=navigator.onLine?"The route service didn't answer. Fill in the minutes yourself.":"Offline: fill in the minutes yourself."}};
   const close=()=>{ov.remove();if(needsRender){needsRender=false;render()}};
   ov.addEventListener("click",e=>{if(e.target===ov)close()});
   f("cancel").onclick=close;
@@ -2163,7 +2206,8 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
     const o={id:it.id,kind:k,title:f("title").value.trim(),date:f("date").value,notes:f("notes").value.trim()};
     for(const key of ["with","fromList","fromItem"])if(it[key]!==undefined)o[key]=it[key];
     if(k==="event"||k==="away"){const lv=f("loc").value.trim();if(lv)o.location=lv}
-    if(k==="event"){o.start=f("start").value;o.end=f("end").value;o.cat=f("cat").value;o.optional=f("optional").checked||undefined;o.marker=f("marker").checked||undefined;o.flex=f("flex").checked||undefined;if(o.marker)o.end=hm(Math.min(mins(o.start)+1,1439));
+    if(k==="event"){const tb=parseInt(f("tb").value,10),ta=parseInt(f("ta").value,10);if(tb>0)o.travelBefore=Math.min(tb,600);if(ta>0)o.travelAfter=Math.min(ta,600);if(tb>0||ta>0)o.travelMode=f("tm").value;
+      o.start=f("start").value;o.end=f("end").value;o.cat=f("cat").value;o.optional=f("optional").checked||undefined;o.marker=f("marker").checked||undefined;o.flex=f("flex").checked||undefined;if(o.marker)o.end=hm(Math.min(mins(o.start)+1,1439));
       const ev=Number(f("repeat").value);
       if(ev){const ds=DOW.map((_,i)=>i+1).filter(i=>sh.querySelector('[name=d'+i+']').checked);
         o.repeat={days:ds.length?ds:[isoDow(o.date)],every:ev,from:f("from").value||(r&&r.from)||o.date,until:f("until").value||undefined,except:(r&&r.except)||[]};
