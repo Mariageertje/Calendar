@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261030182356";
+<script>window.CAL_BUILD="20261030183243";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -2071,7 +2071,9 @@ function attachDrag(el,o,d,hourPx,isMarker){
     e.stopPropagation();
     const isResize=!isMarker&&e.target.classList&&e.target.classList.contains("rz");
     const isResizeTop=!isMarker&&e.target.classList&&e.target.classList.contains("rzt");
-    const startY=e.clientY,startX=e.clientX,s0=mins(it.start),e0=isMarker?s0+1:mins(it.end);
+    const startY=e.clientY,startX=e.clientX,startPY=e.clientY+window.scrollY,s0=mins(it.start);
+    const e0=isMarker?s0+1:(it._part==="first"?(dayNum(it._src.endDate||addDays(d,1))-dayNum(d))*1440+mins(it._src.end):mins(it.end)),MAXE=1440+720; // a block may run on into the next morning
+    let lastEv=null,raf=0,space=null;
     let tip=null;
     const touch=e.pointerType==="touch",t0=Date.now();
     let active=!touch,moved=false,newDate=d,ns=s0,ne=e0,lp=null,cp=null,done=false;
@@ -2082,25 +2084,28 @@ function attachDrag(el,o,d,hourPx,isMarker){
     const cols=[...document.querySelectorAll(".col")];
     const label=el.querySelector(isMarker?"span":".tm");
     const onMove=ev=>{
-      const dy=ev.clientY-startY,dx=ev.clientX-startX;lastXY={x:ev.clientX,y:ev.clientY};
+      const dy=ev.clientY+window.scrollY-startPY,dx=ev.clientX-startX;lastXY={x:ev.clientX,y:ev.clientY};lastEv={clientX:ev.clientX,clientY:ev.clientY,shiftKey:ev.shiftKey,altKey:ev.altKey,preventDefault(){}};
       if(!active){if(Math.abs(dy)>8||Math.abs(dx)>8)finish(false);return}
       if(!moved&&Math.abs(dy)<5&&Math.abs(dx)<5)return;
       moved=true;dragging=true;el.classList.add("dragging");ev.preventDefault();
+      if(!space&&!isMarker&&!isResizeTop){const w=$("scroller").parentNode;space=h("div",{id:"dragspace",style:"height:"+(6*hourPx)+"px"});w.parentNode.insertBefore(space,w.nextSibling)}
+      if(!raf){const tick=()=>{if(done){raf=0;return}if(lastEv){const y=lastEv.clientY;const v=y>innerHeight-60?Math.min(3,Math.ceil((y-innerHeight+60)/15)):y<90?-Math.min(3,Math.ceil((90-y)/15)):0;if(v){window.scrollBy(0,v);onMove(lastEv)}}raf=requestAnimationFrame(tick)};raf=requestAnimationFrame(tick)}
       const step=(ev.shiftKey||ev.altKey)?1:5, raw=dy/hourPx*60, snap=x=>Math.round(x/step)*step;
-      if(isResize){ne=Math.max(ns+step,Math.min(snap(e0+raw),1439))}
+      if(isResize){ne=Math.max(ns+step,Math.min(snap(e0+raw),MAXE))}
       else if(isResizeTop){ns=Math.max(START_H*60,Math.min(snap(s0+raw),ne-step))}
-      else{const len=e0-s0;ns=Math.max(START_H*60,Math.min(snap(s0+raw),1439-len));ne=ns+len;
+      else{const len=e0-s0;ns=Math.max(START_H*60,Math.min(snap(s0+raw),isMarker?1438:Math.min(1435,MAXE-len)));ne=ns+len;
         if(mode==="week")for(const c of cols){const r=c.getBoundingClientRect();if(ev.clientX>=r.left&&ev.clientX<r.right){if(c.dataset.date!==newDate){newDate=c.dataset.date;el.style.left="3px";el.style.width="calc(100% - 6px)";c.appendChild(el)}break}}}
       el.style.top=(ns-START_H*60)/60*hourPx+"px";
-      for(const tr of (el._trv||[])){tr.style.top=((tr._off==="end"?ne:ns+tr._off)-START_H*60)/60*hourPx+(tr._off==="end"?1:0)+"px";if(tr.parentNode!==el.parentNode){tr.style.left=el.style.left;tr.style.width=el.style.width;el.parentNode.appendChild(tr)}}
-      if(!isMarker){el.style.height=Math.max((ne-ns)/60*hourPx-2,16)+"px";if(label)label.textContent=" "+hm(ns)+"–"+hm(ne)}
+      for(const tr of (el._trv||[])){tr.style.display=tr._off==="end"&&ne>=1440?"none":"";tr.style.top=((tr._off==="end"?ne:ns+tr._off)-START_H*60)/60*hourPx+(tr._off==="end"?1:0)+"px";if(tr.parentNode!==el.parentNode){tr.style.left=el.style.left;tr.style.width=el.style.width;el.parentNode.appendChild(tr)}}
+      const endTxt=ne>1440?DOW[isoDow(addDays(newDate,1))-1]+" "+hm(ne-1440):hm(Math.min(ne,1439));
+      if(!isMarker){el.style.height=Math.max((Math.min(ne,1440)-ns)/60*hourPx-2,16)+"px";if(label)label.textContent=" "+hm(ns)+"–"+endTxt}
       else if(label)label.textContent="☾ "+it.title+" "+hm(ns);
       if(!tip){tip=h("div",{class:"dragtip"});document.body.appendChild(tip)}
-      tip.textContent=isMarker?hm(ns):hm(ns)+"–"+hm(ne)+" · "+fmtDur(ne-ns)+(step===1?" (1-min steps)":"");tip.style.left=ev.clientX+"px";tip.style.top=ev.clientY+"px";
+      tip.textContent=isMarker?hm(ns):hm(ns)+"–"+endTxt+" · "+fmtDur(ne-ns)+(step===1?" (1-min steps)":"");tip.style.left=ev.clientX+"px";tip.style.top=ev.clientY+"px";
     };
     const block=ev=>{if(active)ev.preventDefault()};
     function finish(commit){
-      if(done)return;done=true;clearTimeout(lp);clearTimeout(cp);el.classList.remove("arming");if(tip){tip.remove();tip=null}
+      if(done)return;done=true;clearTimeout(lp);clearTimeout(cp);el.classList.remove("arming");if(tip){tip.remove();tip=null}if(raf){cancelAnimationFrame(raf);raf=0}if(space){space.remove();space=null}
       document.removeEventListener("pointermove",onMove);document.removeEventListener("pointerup",onUp);document.removeEventListener("pointercancel",onCancel);document.removeEventListener("touchmove",block,{passive:false});
       el.classList.remove("dragging");if(moved)lastDragEnd=Date.now();
       if(!commit){if(moved){dragging=false;render()}return}
@@ -2119,21 +2124,21 @@ function attachDrag(el,o,d,hourPx,isMarker){
 }
 async function commitDrag(it,isRoutine,occDate,newDate,ns,ne,isMarker){
   if(it._src&&!isRoutine){const src=it._src,A=(dd,m)=>dayNum(dd)*1440+m;
-    const s0=A(occDate,mins(it.start)),e0=A(occDate,mins(it.end)),s1=A(newDate,ns),e1=A(newDate,ne);
+    const s0=A(occDate,mins(it.start)),e0=A(occDate,it._part==="first"?(dayNum(src.endDate||addDays(occDate,1))-dayNum(occDate))*1440+mins(src.end):mins(it.end)),s1=A(newDate,ns),e1=A(newDate,ne);
     let S=A(src.date,mins(src.start)),E=A(src.endDate||src.date,mins(src.end));
     if(s1-s0===e1-e0){S+=s1-s0;E+=s1-s0}else{if(s1!==s0)S=s1;if(e1!==e0)E=e1}
     if(E-S<5){dragging=false;render();return}
     const sd=fromDayNum(Math.floor(S/1440)),ed=fromDayNum(Math.floor(E/1440)),before=snapIt(src);
     const mv=Object.assign({},src,{date:sd,start:hm(S%1440),end:hm(E%1440)});if(ed>sd&&!(ed===addDays(sd,1)&&E%1440===0))mv.endDate=ed;else{delete mv.endDate;if(E%1440===0)mv.end="23:59"}
     const ok=await save(mv);dragging=false;if(ok)pushUndo("Moved “"+src.title+"”",()=>save(before));render();return}
-  const start=hm(ns),end=isMarker?hm(Math.min(ns+1,1439)):hm(Math.min(ne,1439));
-  if(start===it.start&&end===it.end&&newDate===occDate){dragging=false;render();return}
+  const over=!isMarker&&ne>1440,start=hm(ns),end=isMarker?hm(Math.min(ns+1,1439)):over?hm(ne-1440):hm(Math.min(ne,1439));
+  if(start===it.start&&end===it.end&&newDate===occDate&&!over===!it.endDate){dragging=false;render();return}
   const where=(newDate!==occDate?DOW[isoDow(newDate)-1]+" "+fmtShort(newDate)+", ":"")+start+(isMarker?"":"–"+end);
   const before=snapIt(it);
-  if(!isRoutine){const mv=Object.assign({},it,{date:newDate,start,end});delete mv.replaces;const ok=await save(mv);dragging=false;if(ok)pushUndo("Moved “"+it.title+"”: "+where,()=>save(before));render();return}
+  if(!isRoutine){const mv=Object.assign({},it,{date:newDate,start,end});delete mv.replaces;if(over)mv.endDate=addDays(newDate,1);else delete mv.endDate;const ok=await save(mv);dragging=false;if(ok)pushUndo("Moved “"+it.title+"”: "+where,()=>save(before));render();return}
   const one=async()=>{
     const rr=Object.assign({},it.repeat,{except:[...(it.repeat.except||[]),occDate]});
-    const copy={kind:"event",title:it.title,cat:it.cat,notes:it.notes,optional:it.optional,marker:it.marker,location:it.location,date:newDate,start,end};
+    const copy={kind:"event",title:it.title,cat:it.cat,notes:it.notes,optional:it.optional,marker:it.marker,location:it.location,date:newDate,start,end};if(over)copy.endDate=addDays(newDate,1);
     const okA=await save(Object.assign({},it,{repeat:rr}));const cid=okA&&await save(copy);dragging=false;if(cid)pushUndo("Changed “"+it.title+"” for "+fmtShort(newDate),async()=>{await del("items",cid);return save(before)});render()};
   const all=async()=>{
     const rr=JSON.parse(JSON.stringify(it.repeat));
