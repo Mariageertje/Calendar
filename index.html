@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261030181129";
+<script>window.CAL_BUILD="20261030181508";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -177,6 +177,19 @@ h1{font-family:var(--display);font-weight:400;font-size:22px;margin:0;letter-spa
 .range{font-weight:600;font-variant-numeric:tabular-nums;min-width:0}
 .grow{flex:1}
 .brk{flex-basis:100%;height:0}
+.uni{margin-top:10px;border:1px solid var(--line);border-left:4px solid var(--c-study);background:var(--paper);border-radius:10px;padding:10px 12px}
+.uni summary{cursor:pointer;font-weight:600;font-size:14px;list-style-position:inside}
+.uni summary .od-n{font-weight:400;color:var(--muted);margin-left:8px;font-size:12.5px}
+.unirow{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line);font-size:13.5px;line-height:1.35}
+.unirow input[type=checkbox]{margin-top:2px;accent-color:var(--accent);width:15px;height:15px;flex:0 0 auto}
+.unirow .ud{flex:0 0 74px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;padding-top:1px}
+.unirow .ud.late{color:var(--danger);font-weight:600}
+.unirow .ut{flex:1;min-width:0;overflow-wrap:anywhere;cursor:pointer;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+@media (max-width:760px){.unirow{font-size:13px;gap:6px;padding:5px 0}.unirow .ud{flex-basis:62px;font-size:11.5px}.unirow .uc{display:none}}
+.unirow.dl .ut{color:var(--danger);font-weight:600}
+.unirow .uc{flex:0 0 auto;font-size:10.5px;font-weight:600;border-radius:999px;padding:1px 7px;background:var(--c-study-bg);color:var(--c-study);margin-top:1px}
+.unirow.done .ut{text-decoration:line-through;color:var(--muted);font-weight:400}
+.unimore{border:0;background:none;color:var(--accent);font-size:12.5px;padding:6px 0 0;cursor:pointer;min-height:0}
 .sw-done{position:absolute;top:0;bottom:0;left:0;width:0;overflow:hidden;background:var(--c-sport);color:#fff;border:0;border-radius:6px;padding:0;font-weight:600;font-size:13px;white-space:nowrap;transition:width .22s ease;min-height:0}
 .swipe.swiping .sw-done{transition:none}
 .lifted{opacity:.4}
@@ -567,6 +580,7 @@ body.pasting .col,body.pasting .mc,body.pasting .ad{cursor:copy}body.pasting .to
 
   <section class="view" id="view-cal">
     <div id="overdue" data-live></div>
+    <div id="uni" data-live></div>
     <div class="strip" id="strip"></div>
     <div class="weekbar" id="weekbar" data-live></div>
     <div class="legend" id="legend" data-live aria-label="Show or hide categories and calendars"></div>
@@ -887,7 +901,7 @@ function updRange(){if(view!=="cal"||mode==="month")return;const v=visibleInfo()
 function renderCal(){
   const m=mondayOf(cursor);let ds=days();
   vWeek.setAttribute("aria-pressed",mode==="week");vDay.setAttribute("aria-pressed",mode==="day");vMonth.setAttribute("aria-pressed",mode==="month");
-  renderOverdue();renderClip();
+  renderOverdue();renderUni();renderClip();
   if(mode==="month"){const r=document.getElementById("tlrail");if(r)r.hidden=true;renderStrip();renderLegend();renderMonth();return}
   renderStrip();renderWeekbar();renderLegend();
   renderDaystrip();
@@ -1641,6 +1655,31 @@ function renderOverdue(){
       pk.appendChild(r)}}
   el.appendChild(det)}
 
+/* ---------- university tasks: one list above the calendar ---------- */
+const UNI_RE=/\b(identiteit|wa\b|wijsgerige|agolog|vc\b|visuele|caa\b|culturele en artistieke|duoles|canvas|exam|examen|paper|honours|internship|stage\b|vub|mens en omgeving|politieke psych|testmoment|zotero|phenomenolog|literature study|buddycheck|group conversation|groepsgesprek|immersion|reflection exercise|werkcollege|exchange)/i;
+const isUni=t=>t&&t.kind==="task"&&(t.uni===true||(t.uni!==false&&UNI_RE.test(t.title||"")));
+function courseOf(t){t=t||"";if(/identiteit/i.test(t))return"Identiteiten";if(/\bWA\b|wijsgerige|agolog/i.test(t))return"WA";if(/\bVC\b|visuele/i.test(t))return"VC";if(/\bCAA\b|culturele en artistieke|duoles|immersion|testmoment|reflection exercise|values engagement|phenomenolog/i.test(t))return"CAA";if(/mens en omgeving/i.test(t))return"M&O";if(/politieke/i.test(t))return"Pol. psy";return""}
+let uniOpen=store("mc.uniopen")!=="0",uniAll=false;
+function renderUni(){
+  const el=$("uni");if(!el)return;el.innerHTML="";if(!loaded)return;const t=todayStr(),m=mondayOf(t),soon=addDays(t,14);
+  const all=items.filter(x=>isUni(x)&&(x.date?(x.date>=addDays(t,-45)&&(!x.done||x.date===t)&&(x.date>=t||!x.done)):(x.week&&!x.done&&x.week<=addDays(m,7))));
+  all.sort((a,b)=>((a.date||a.week)+(a.time||"")).localeCompare((b.date||b.week)+(b.time||""))||(b.deadline?1:0)-(a.deadline?1:0));
+  if(!all.length)return;
+  const near=all.filter(x=>!x.date||x.date<=soon),week=all.filter(x=>!x.done&&(x.date?(x.date>=t&&x.date<=addDays(t,7)):x.week>=m)),shown=uniAll?all:week.slice(0,8);
+  const det=h("details",{class:"uni"});det.open=uniOpen;det.ontoggle=()=>{uniOpen=det.open;store("mc.uniopen",uniOpen?"1":"0")};
+  const late=all.filter(x=>x.date&&x.date<t&&!x.done).length,dls=near.filter(x=>x.deadline&&!x.done).length;
+  det.appendChild(h("summary",{},"University",h("span",{class:"od-n",text:[near.filter(x=>!x.done).length+" in the next 2 weeks",dls?dls+" deadline"+(dls>1?"s":""):"",late?late+" late":""].filter(Boolean).join(" · ")})));
+  for(const tk of shown){
+    const lbl=tk.date?(tk.date===t?"Today":tk.date===addDays(t,1)?"Tomorrow":DOW[isoDow(tk.date)-1]+" "+fmtShort(tk.date))+(tk.time?" "+tk.time:""):(tk.week<m?"Week "+fmtShort(tk.week):tk.week===m?"This week":"Next week");
+    const cb=h("input",{type:"checkbox","aria-label":"Done: "+tk.title});cb.checked=!!tk.done;
+    cb.onchange=async()=>{const before=snapIt(tk);const n=Object.assign({},tk);if(cb.checked){n.done=true;if(!n.date&&n.week)n.week=n.week<m?m:n.week}else delete n.done;if(await save(n)){if(cb.checked)await syncListDate(tk,null,true);pushUndo((cb.checked?"Done: “":"Not done: “")+tk.title+"”",()=>save(before))}};
+    const co=courseOf(tk.title);
+    const tt=h("span",{class:"ut",text:tk.title});
+    const r=h("div",{class:"unirow"+(tk.deadline?" dl":"")+(tk.done?" done":""),"data-id":tk.id,draggable:tk.done?null:"true"},cb,h("span",{class:"ud"+(tk.date&&tk.date<t&&!tk.done?" late":""),text:lbl}),tt,co?h("span",{class:"uc",text:co}):null);
+    tt.onclick=e=>{if(lockedDl(tk)||tk.done){openEditor(tk);return}const acts=[["Edit",()=>openEditor(tk)],["Today",()=>taskToDay(tk,t)],["Tomorrow",()=>taskToDay(tk,addDays(t,1))],["Pick a day…",()=>pickDate("Plan “"+tk.title+"” on…",d=>taskToDay(tk,d))]];if(tk.date)acts.push(["To week list",()=>taskToWeek(tk,mondayOf(tk.date))]);popMenu(e.clientX,e.clientY,acts)};
+    rowGestures(r,{onDel:()=>delItem(tk),onDone:tk.done?null:()=>doneItem(tk),drag:tk.done?null:tk});det.appendChild(r)}
+  if(all.length>shown.length||uniAll)det.appendChild(h("button",{type:"button",class:"unimore",text:uniAll?"Show less":"Show everything ahead ("+all.length+")",onclick:()=>{uniAll=!uniAll;renderUni()}}));
+  el.appendChild(det)}
 /* ---------- quick add in plain words (Dutch or English) ---------- */
 const QWD={maandag:1,monday:1,mon:1,ma:1,dinsdag:2,tuesday:2,tues:2,tue:2,di:2,woensdag:3,wednesday:3,wed:3,wo:3,donderdag:4,thursday:4,thurs:4,thur:4,thu:4,do:4,vrijdag:5,friday:5,fri:5,vr:5,zaterdag:6,saturday:6,sat:6,za:6,zondag:7,sunday:7,sun:7,zo:7};
 const QMO={januari:1,january:1,jan:1,februari:2,february:2,feb:2,maart:3,march:3,mrt:3,mar:3,april:4,apr:4,mei:5,may:5,juni:6,june:6,jun:6,juli:7,july:7,jul:7,augustus:8,august:8,aug:8,september:9,sept:9,sep:9,oktober:10,october:10,okt:10,oct:10,november:11,nov:11,december:12,dec:12};
@@ -2087,7 +2126,7 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
    '<div class="row"><label class="k-event k-task k-away k-allday">Date<input type="date" id="f-date"></label>'+
      '<label class="k-event k-away k-allday" id="f-endLbl"><span id="f-endTxt">Until</span><input type="date" id="f-endDate"></label></div>'+
    '<div class="row k-event k-away"><label>Start<input type="time" id="f-start" step="60"></label><label>End<input type="time" id="f-end" step="60"></label></div>'+
-   '<div class="row k-task"><label>Time (optional)<input type="time" id="f-time" step="60"></label><label class="inline" style="align-self:end"><input type="checkbox" id="f-deadline"> Deadline</label></div>'+
+   '<div class="row k-task"><label>Time (optional)<input type="time" id="f-time" step="60"></label><label class="inline" style="align-self:end"><input type="checkbox" id="f-deadline"> Deadline</label><label class="inline" style="align-self:end"><input type="checkbox" id="f-uni"> University</label></div>'+
    '<div class="locrow k-event k-away"><label>Location<input type="text" id="f-loc" list="f-locs" autocomplete="off" placeholder="Place or address"></label><a id="f-map" target="_blank" rel="noopener" hidden>Open in Maps</a><button type="button" class="btn sm travel-btn k-event" id="f-travel" hidden>+ Travel</button></div><datalist id="f-locs">'+knownLocations().map(x=>'<option value="'+esc(x)+'"></option>').join("")+'</datalist>'+
    '<label class="k-event">Category<select id="f-cat">'+catOpts+'</select></label>'+
    '<div class="k-event"><label>Repeat<select id="f-repeat"><option value="0">Doesn\'t repeat</option><option value="1">Every week</option><option value="2">Every other week</option></select></label></div>'+
@@ -2103,7 +2142,7 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
   let k=kind;
   const f=id=>sh.querySelector("#f-"+id);
   f("title").value=it.title||"";f("date").value=occDate||it.date||cursor;f("endDate").value=it.endDate||"";
-  f("start").value=it.start||"09:00";f("end").value=it.end||"10:00";f("time").value=it.time||"";f("deadline").checked=!!it.deadline;
+  f("start").value=it.start||"09:00";f("end").value=it.end||"10:00";f("time").value=it.time||"";f("deadline").checked=!!it.deadline;f("uni").checked=isUni(Object.assign({kind:"task"},it));
   f("repeat").value=r?String(r.every||1):"0";f("from").value=r?(r.from||""):"";f("until").value=r?(r.until||""):"";
   f("loc").value=it.location||"";const syncMap=()=>{const v=f("loc").value.trim();const a=sh.querySelector("#f-map");a.hidden=!v;if(v)a.href="https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(v);f("travel").style.display=v&&k==="event"&&!f("marker").checked?"":"none"};f("loc").addEventListener("input",syncMap);syncMap();f("optional").checked=!!it.optional;f("marker").checked=!!it.marker;f("flex").checked=!!it.flex;f("notes").value=it.notes||"";
   function sync(){
@@ -2130,7 +2169,7 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
         o.repeat={days:ds.length?ds:[isoDow(o.date)],every:ev,from:f("from").value||(r&&r.from)||o.date,until:f("until").value||undefined,except:(r&&r.except)||[]};
         if(!o.repeat.until)delete o.repeat.until;o.date=undefined}
       else{delete o.replaces;const ed=f("endDate").value;if(ed&&ed>o.date)o.endDate=ed;else if(!o.marker&&mins(o.end)<mins(o.start))o.endDate=addDays(o.date,1)}}
-    if(k==="task"){o.time=f("time").value||undefined;o.deadline=f("deadline").checked||undefined;o.done=it.done||undefined}
+    if(k==="task"){o.time=f("time").value||undefined;o.deadline=f("deadline").checked||undefined;o.done=it.done||undefined;for(const key of ["week","order","mins"])if(it[key]!==undefined&&!o.date)o[key]=it[key];const u=f("uni").checked;if(u!==UNI_RE.test(o.title))o.uni=u;else delete o.uni}
     if(k==="away"||k==="allday"){o.endDate=f("endDate").value||undefined;if(k==="away"){o.start=f("start").value;o.end=f("end").value}}
     return o}
   function valid(o){if(!o.title){toast("Add a title first.");return false}if(!o.date&&!o.repeat){toast("Pick a date.");return false}
