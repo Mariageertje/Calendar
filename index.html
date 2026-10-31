@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261031133214";
+<script>window.CAL_BUILD="20261031135802";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -1044,7 +1044,7 @@ function renderCal(){
       const c=CATS[it.cat]?it.cat:"study";
       const b=h("button",{class:"ev"+(o.isRoutine?" routine":"")+(it.optional?" opt":"")+(ht<34?" short":""),style:"top:"+top+"px;height:"+ht+"px;left:calc("+(o.col/o.ncol*100)+"% + 3px);width:calc("+(100/o.ncol)+"% - 6px);background:var(--c-"+c+"-bg);color:var(--c-"+c+")",title:it.title+" · "+it.start+"–"+it.end+(it.location?"\n"+it.location:"")+(it.notes?"\n"+it.notes:"")+(o.isRoutine?"\n(routine)":"")},
         h("span",{class:"t",text:it.title}),h("span",{class:"tm",text:(ht<34?" ":"")+(it._src?(it._part==="first"?it.start+" → "+DOW[isoDow(it._src.endDate||addDays(d,1))-1]+" "+it._src.end:"→ "+it._src.end):it.start+"–"+it.end)}),(it.location&&ht>=46?h("span",{class:"loc",text:it.location}):null),h("span",{class:"rzt","aria-hidden":"true",title:"Drag to change the start time"}),h("span",{class:"rz","aria-hidden":"true",title:"Drag to change the end time"}));
-      b._trv=[];const pos="left:calc("+(o.col/o.ncol*100)+"% + 3px);width:calc("+(100/o.ncol)+"% - 6px);color:var(--c-"+c+")";const src0=it._src||it,ic=TRV_ICON[src0.travelMode||"ebike"]||"";
+      b._trv=[];const pos="left:calc("+(o.col/o.ncol*100)+"% + 3px);width:calc("+(100/o.ncol)+"% - 6px);color:var(--c-"+c+")";const src0=it._src||it,ic=TRV_ICON[src0.travelMode||"bike"]||"";
       const tb=trvB(it),ta=trvA(it);
       if(tb){const tr=h("div",{class:"trv",style:pos+";top:"+((mins(it.start)-tb-START_H*60)/60*hourPx)+"px;height:"+Math.max(tb/60*hourPx-1,6)+"px",title:"Travel "+tb+" min"},tb/60*hourPx>=9?h("span",{text:ic+" "+tb+" min"}):null);tr._off=-tb;tr._len=tb;col.appendChild(tr);b._trv.push(tr)}
       if(ta){const tr=h("div",{class:"trv after",style:pos+";top:"+((mins(it.end)-START_H*60)/60*hourPx+1)+"px;height:"+Math.max(ta/60*hourPx-1,6)+"px",title:"Travel back "+ta+" min"},ta/60*hourPx>=9?h("span",{text:ic+" "+ta+" min"}):null);tr._off="end";tr._len=ta;col.appendChild(tr);b._trv.push(tr)}
@@ -1845,7 +1845,7 @@ function setHour(px,anchor){px=Math.round(Math.max(24,Math.min(140,px)));if(Math
 })();
 
 /* ---------- travel time before / after a block with a place ---------- */
-const TRV_ICON={ebike:"🚲",bike:"🚲",walk:"🚶",car:"🚗",transit:"🚆"};
+const TRV_ICON={ebike:"Bike",bike:"Bike",walk:"Walk",car:"Car",transit:"Train"};
 function travelHome(){return (cfg("travel").home||"").trim()}
 function travelNeighbours(id,date,st,en){let from=null,to=null,fe=-1,ts=1e9; // the block before / after on the same day that has a place
   for(const o of eventsOn(date,true)){const x=o.it._src||o.it;if(x.id===id||!x.location||o.it.marker)continue;const s0=mins(o.it.start),e0=mins(o.it.end);
@@ -1863,7 +1863,7 @@ async function travelMinutes(from,to,mode){const a=await geocode(from),b=await g
   if(Math.abs(a[0]-b[0])<1e-4&&Math.abs(a[1]-b[1])<1e-4)return 0;
   const prof=mode==="walk"?"routed-foot":mode==="car"?"routed-car":"routed-bike";
   const r=await fetch("https://routing.openstreetmap.de/"+prof+"/route/v1/driving/"+a.join(",")+";"+b.join(",")+"?overview=false");if(!r.ok)throw new Error("route");
-  const j=await r.json();if(!j.routes||!j.routes[0])return null;let m=j.routes[0].duration/60;if(mode==="ebike")m*=0.75;if(mode==="car")m+=5;
+  const j=await r.json();if(!j.routes||!j.routes[0])return null;let m=j.routes[0].duration/60;if(mode==="car")m+=5;
   return Math.max(5,Math.ceil(m/5)*5)}
 const TRAVEL_RE=/^(bike|cycle|walk|train|tram|bus|metro|drive|travel|onderweg|fiets|trein|wandel|rij|reis)/i;
 function travelOptions(loc){const L=(loc||"").trim().toLowerCase();const there=new Map(),back=new Map();
@@ -2228,7 +2228,7 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
    '<div class="row k-event k-away"><label>Start<input type="time" id="f-start" step="60"></label><label>End<input type="time" id="f-end" step="60"></label></div>'+
    '<div class="row k-task"><label>Time (optional)<input type="time" id="f-time" step="60"></label><label class="inline" style="align-self:end"><input type="checkbox" id="f-deadline"> Deadline</label><label class="inline" style="align-self:end"><input type="checkbox" id="f-uni"> University</label></div>'+
    '<div class="locrow k-event k-away"><label>Location<input type="text" id="f-loc" list="f-locs" autocomplete="off" placeholder="Place or address"></label><a id="f-map" target="_blank" rel="noopener" hidden>Open in Maps</a></div>'+
-   '<div class="k-event trvrow"><span class="wk-label">Travel time</span><div class="trvf"><label>Before<input type="number" id="f-tb" min="0" step="5" inputmode="numeric" placeholder="0"></label><label>After<input type="number" id="f-ta" min="0" step="5" inputmode="numeric" placeholder="0"></label><label>By<select id="f-tm"><option value="ebike">E-bike</option><option value="bike">Bike</option><option value="walk">Walk</option><option value="car">Car</option><option value="transit">Train / tram</option></select></label><button type="button" class="btn sm" id="f-tcalc">Calculate</button></div><p class="why" id="f-tinfo" style="margin:2px 0 0"></p></div><datalist id="f-locs">'+knownLocations().map(x=>'<option value="'+esc(x)+'"></option>').join("")+'</datalist>'+
+   '<div class="k-event trvrow"><span class="wk-label">Travel time</span><div class="trvf"><label>Before<input type="number" id="f-tb" min="0" step="5" inputmode="numeric" placeholder="0"></label><label>After<input type="number" id="f-ta" min="0" step="5" inputmode="numeric" placeholder="0"></label><label>By<select id="f-tm"><option value="bike">Bike</option><option value="walk">Walk</option><option value="car">Car</option><option value="transit">Train / tram</option></select></label><button type="button" class="btn sm" id="f-tcalc">Calculate</button></div><p class="why" id="f-tinfo" style="margin:2px 0 0"></p></div><datalist id="f-locs">'+knownLocations().map(x=>'<option value="'+esc(x)+'"></option>').join("")+'</datalist>'+
    '<label class="k-event">Category<select id="f-cat">'+catOpts+'</select></label>'+
    '<div class="k-event"><label>Repeat<select id="f-repeat"><option value="0">Doesn\'t repeat</option><option value="1">Every week</option><option value="2">Every other week</option></select></label></div>'+
    '<div class="k-event rep"><div class="days">'+dayBoxes+'</div></div>'+
@@ -2255,7 +2255,7 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
   }
   sh.querySelectorAll(".kinds button").forEach(b=>b.onclick=()=>{k=b.dataset.k;sync()});
   f("repeat").onchange=sync;sync();syncMap();sh.querySelectorAll(".kinds button").forEach(b=>b.addEventListener("click",syncMap));
-  f("tb").value=it.travelBefore||"";f("ta").value=it.travelAfter||"";f("tm").value=it.travelMode||"ebike";
+  f("tb").value=it.travelBefore||"";f("ta").value=it.travelAfter||"";f("tm").value=it.travelMode&&it.travelMode!=="ebike"?it.travelMode:"bike";
   f("tcalc").onclick=async()=>{const info=sh.querySelector("#f-tinfo");const dest=f("loc").value.trim();if(!dest){info.textContent="Add a location first.";return}
     const mode=f("tm").value;if(mode==="transit"){info.innerHTML="";info.append("Train / tram can't be calculated here: ",h("a",{href:"https://www.google.com/maps/dir/?api=1&travelmode=transit&destination="+encodeURIComponent(dest),target:"_blank",rel:"noopener",text:"check it in Maps"})," and fill in the minutes.");return}
     const home=travelHome();if(!home){const inp=h("input",{type:"text",placeholder:"Home address (start point), e.g. street + number, Elsene"});const ok=h("button",{type:"button",class:"btn sm",text:"Save",onclick:async()=>{if(inp.value.trim()){await setCfg("travel",{home:inp.value.trim()});f("tcalc").click()}}});info.innerHTML="";info.append(inp,ok);inp.focus();return}
