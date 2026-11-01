@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261101122604";
+<script>window.CAL_BUILD="20261101123628";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -596,6 +596,9 @@ body.pasting .col,body.pasting .mc,body.pasting .ad{cursor:copy}body.pasting .to
 .td-row:first-child{border-top:0}
 .td-row input[type=checkbox]{margin-top:2px;width:15px;height:15px;accent-color:var(--accent);flex:0 0 auto}
 .td-row .tx{flex:1;min-width:0;overflow-wrap:anywhere}
+.td-row .tx{cursor:text}
+.td-more{border:0;background:none;color:var(--muted);font-size:16px;line-height:1;padding:0 2px;min-height:0;cursor:pointer;flex:0 0 auto}
+.td-more:hover{color:var(--ink)}
 .td-row .when{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 .td-add{border:1px dashed var(--line-strong);background:transparent;border-radius:8px;padding:7px 9px;width:100%;font-size:13.5px}
 .td-act{display:flex;gap:8px;flex-wrap:wrap}
@@ -1614,7 +1617,12 @@ function renderToday(){
   const todays=items.filter(x=>x.kind==="task"&&x.date===d&&!x.done).sort((a,b)=>(a.time||"99").localeCompare(b.time||"99")||(b.deadline?1:0)-(a.deadline?1:0));
   const earlier=items.filter(x=>x.kind==="task"&&!x.done&&((x.date&&x.date<d&&x.date>=addDays(d,-30))||(!x.date&&x.week===m)));
   const tr=t=>{const cb=h("input",{type:"checkbox","aria-label":"Done: "+t.title});cb.onchange=()=>doneItem(t);
-    return h("div",{class:"td-row"},cb,h("span",{class:"tx",text:t.title}),h("span",{class:"when",text:t.deadline?"⚑ "+(t.time||"due"):t.date&&t.date<d?dayLbl(t.date):t.time||(t.date?"":"this week")}))};
+    const tx=h("span",{class:"tx",text:t.title,title:"Tap to rename"});
+    const row=h("div",{class:"td-row","data-id":t.id},cb,tx,h("span",{class:"when",text:t.deadline?"⚑ "+(t.time||"due"):t.date&&t.date<d?dayLbl(t.date):t.time||(t.date?"":"this week")}),
+      h("button",{type:"button",class:"td-more","aria-label":"More for "+t.title,text:"⋯",onclick:e=>{e.stopPropagation();overdueMenu(t,e.clientX,e.clientY)}}));
+    tx.onclick=e=>{e.stopPropagation();inlineEdit(tx,t,row)};
+    row.addEventListener("contextmenu",e=>{if(e.target.closest("input"))return;e.preventDefault();overdueMenu(t,e.clientX,e.clientY)});
+    rowGestures(row,{onDel:()=>delItem(t),onDone:()=>doneItem(t)});return row};
   const tc=h("div",{class:"card"},h("div",{class:"td-sec"},"Today",h("span",{text:todays.length?todays.length+" open":"nothing planned"})));
   todays.forEach(t=>tc.appendChild(tr(t)));
   if(earlier.length){const det=h("details",{class:"pdone"},h("summary",{text:"Earlier and this week's list, still open ("+earlier.length+")"}));earlier.sort((a,b)=>(a.date||a.week).localeCompare(b.date||b.week)).forEach(t=>det.appendChild(tr(t)));tc.appendChild(det)}
@@ -1623,8 +1631,22 @@ function renderToday(){
   const dn=f.log.map((e,j)=>({t:e.t,at:e.at,k:e.k,j})).concat(items.filter(x=>x.kind==="task"&&x.done&&x.doneAt===d).map(x=>({t:x.title,k:"t",id:x.id})));
   const nb=f.log.filter(e=>e.k==="b").length;
   const dc=h("div",{class:"card"},h("div",{class:"td-sec"},"Done today",h("span",{text:[nb?nb+" block"+(nb>1?"s":""):"",dn.length-nb?(dn.length-nb)+" other":""].filter(Boolean).join(" · ")})));
-  for(const e of dn)dc.appendChild(h("div",{class:"td-row"},h("span",{class:"tx",text:e.t}),h("span",{class:"when",text:e.k==="b"?"block "+(e.at||""):e.at||""}),
-    e.k==="m"?h("button",{class:"iconbtn","aria-label":"Remove "+e.t,text:"×",onclick:()=>setFocus(d,x=>{x.log.splice(e.j,1)})}):null));
+  for(const e of dn){
+    const it=e.k==="t"?items.find(x=>x.id===e.id):null,tx=h("span",{class:"tx",text:e.t});
+    if(e.k==="t"&&!it)continue;
+    const rmLog=()=>setFocus(d,x=>{x.log.splice(e.j,1)});
+    const reopen=async()=>{const before=snapIt(it);const n=Object.assign({},it);delete n.done;delete n.doneAt;if(await save(n))pushUndo("Open again: “"+it.title+"”",()=>save(before))};
+    const notToday=async()=>{const before=snapIt(it);const n=Object.assign({},it);delete n.doneAt;if(await save(n))pushUndo("Not done today: “"+it.title+"”",()=>save(before))};
+    const menu=(x,y)=>popMenu(x,y,it?[["Not done yet",reopen],["Done, but not today",notToday],["Edit",()=>openEditor(it)],["Delete",()=>delItem(it),"danger"]]:[["Rename",()=>editLog()],["Remove",rmLog,"danger"]]);
+    const row=h("div",{class:"td-row"},tx,h("span",{class:"when",text:e.k==="b"?"block "+(e.at||""):e.at||""}),
+      h("button",{type:"button",class:"td-more","aria-label":"More for "+e.t,text:"⋯",onclick:ev=>{ev.stopPropagation();menu(ev.clientX,ev.clientY)}}));
+    const editLog=()=>{if(row.querySelector("input.ie"))return;const inp=h("input",{type:"text",class:"ie",value:e.t,enterkeyhint:"done"});let cancel=false,fin=false;row.setAttribute("data-live","");tx.replaceWith(inp);inp.focus();
+      inp.onkeydown=k=>{k.stopPropagation();if(k.key==="Enter"){k.preventDefault();inp.blur()}else if(k.key==="Escape"){cancel=true;inp.blur()}};
+      inp.onblur=async()=>{if(fin)return;fin=true;row.removeAttribute("data-live");const v=inp.value.trim();if(!cancel&&v!==e.t)await setFocus(d,x=>{if(v)x.log[e.j].t=v;else x.log.splice(e.j,1)});needsRender=false;render()}};
+    tx.onclick=ev=>{ev.stopPropagation();if(it)inlineEdit(tx,it,row);else editLog()};
+    row.addEventListener("contextmenu",ev=>{if(ev.target.closest("input"))return;ev.preventDefault();menu(ev.clientX,ev.clientY)});
+    rowGestures(row,{onDel:it?()=>delItem(it):rmLog});
+    dc.appendChild(row)}
   const da=h("input",{type:"text",class:"td-add",placeholder:"+ Something else I did (Enter)","aria-label":"Add to done today"});
   da.id="td-done";da.onkeydown=e=>{if(e.key==="Enter"&&da.value.trim()){e.preventDefault();const v=da.value.trim();da.value="";setFocus(d,x=>{x.log.push({t:v,at:nowHM(),k:"m"})}).then(()=>{needsRender=false;render();const a=$("td-done");if(a)a.focus()})}};
   dc.appendChild(da);wrap.appendChild(dc);
