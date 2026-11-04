@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261101123628";
+<script>window.CAL_BUILD="20261104140034";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -135,7 +135,7 @@ input[type=password]{border:1px solid var(--line-strong);background:var(--bg);bo
 /* Layout: a planner sheet — sticky toolbar, deadline strip, then one grid (day names / all-day + tasks / hourly timeline). */
 :root{
   --bg:#f2f4f1; --paper:#fbfcfa; --ink:#1d2622; --muted:#5f6b66; --line:#dde2dd; --line-strong:#c6cdc7;
-  --accent:#2f6b5e; --accent-ink:#ffffff; --today:#e6efe9; --now:#c2412d; --danger:#b33a2a; --shadow:0 10px 30px rgba(20,30,25,.18);
+  --accent:#2f6b5e; --accent-ink:#ffffff; --today:#e6efe9; --now:#c2412d; --danger:#b33a2a; --own:#9a6a00; --shadow:0 10px 30px rgba(20,30,25,.18);
   --c-study:#3b4fa8; --c-study-bg:#e3e7f7;
   --c-class:#4c5d74; --c-class-bg:#e2e7ee;
   --c-sport:#2f7a46; --c-sport-bg:#dcefe1;
@@ -153,14 +153,14 @@ input[type=password]{border:1px solid var(--line-strong);background:var(--bg);bo
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#121715; --paper:#181e1b; --ink:#e6ece8; --muted:#9aa7a1; --line:#29312d; --line-strong:#38423d;
-  --accent:#7cc4b1; --accent-ink:#0f1513; --today:#1d2a25; --now:#ff7a62; --danger:#ff8a78; --shadow:0 10px 30px rgba(0,0,0,.5);
+  --accent:#7cc4b1; --accent-ink:#0f1513; --today:#1d2a25; --now:#ff7a62; --danger:#ff8a78; --own:#e2b45a; --shadow:0 10px 30px rgba(0,0,0,.5);
   --c-study:#aebcff; --c-study-bg:#262d4d; --c-class:#b9c6d8; --c-class-bg:#2a323d; --c-sport:#93d6a6; --c-sport-bg:#1f3a28;
   --c-ritual:#8fd6d0; --c-ritual-bg:#1c3836; --c-meal:#f0c878; --c-meal-bg:#3b3019; --c-rest:#cbb8f2; --c-rest-bg:#322a46;
   --c-social:#f3a1b7; --c-social-bg:#45232d; --c-creative:#f6b48a; --c-creative-bg:#46291a; --c-chores:#d4c9b8; --c-chores-bg:#36322b;
   --c-travel:#bfcad0; --c-travel-bg:#2c3236; --c-sleep:#b4bbe0; --c-sleep-bg:#272a3c; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#121715; --paper:#181e1b; --ink:#e6ece8; --muted:#9aa7a1; --line:#29312d; --line-strong:#38423d;
-  --accent:#7cc4b1; --accent-ink:#0f1513; --today:#1d2a25; --now:#ff7a62; --danger:#ff8a78; --shadow:0 10px 30px rgba(0,0,0,.5);
+  --accent:#7cc4b1; --accent-ink:#0f1513; --today:#1d2a25; --now:#ff7a62; --danger:#ff8a78; --own:#e2b45a; --shadow:0 10px 30px rgba(0,0,0,.5);
   --c-study:#aebcff; --c-study-bg:#262d4d; --c-class:#b9c6d8; --c-class-bg:#2a323d; --c-sport:#93d6a6; --c-sport-bg:#1f3a28;
   --c-ritual:#8fd6d0; --c-ritual-bg:#1c3836; --c-meal:#f0c878; --c-meal-bg:#3b3019; --c-rest:#cbb8f2; --c-rest-bg:#322a46;
   --c-social:#f3a1b7; --c-social-bg:#45232d; --c-creative:#f6b48a; --c-creative-bg:#46291a; --c-chores:#d4c9b8; --c-chores-bg:#36322b;
@@ -431,6 +431,12 @@ input[type=text].intent:focus{outline:none;color:var(--ink);font-style:normal;bo
 .mi.tk.done{text-decoration:line-through;color:var(--muted)}
 .mi.tk.done::before{content:"☑ "}
 .mi.tk.dl{color:var(--danger);font-weight:600}
+.mi.tk.own{color:var(--own)}
+.task.own .tt,.unirow.own .ut,.odrow.own .odtt,.td-row.own .tx{color:var(--own)}
+.td-row.dl .tx{color:var(--danger);font-weight:600}
+.li.ps.own .when{color:var(--own)}
+.li.ps.dl .when{color:var(--danger)}
+.li.ps .when.hot{color:var(--danger)}
 .mi[draggable="true"]{cursor:grab}
 .mmore{font-size:11px;color:var(--muted);background:none;border:0;padding:0 4px;text-align:left;min-height:0}
 .mmore:hover{color:var(--accent)}
@@ -892,6 +898,8 @@ function notReady(el){if(!db){el.innerHTML='<div class="msg">Data can\'t load he
 /* ---------- calendar view ---------- */
 function days(){if(mode==="day")return[cursor];const m=mondayOf(cursor);return[0,1,2,3,4,5,6].map(i=>addDays(m,i))}
 /* ---------- move unfinished things to another day ---------- */
+function ownDl(tk){if(!tk||tk.kind!=="task"||tk.deadline)return false;const r=listItemOf(tk);return !!(r&&r.L.type==="project"&&r.li.by&&!r.li.dl)}
+const dlCls=tk=>tk.deadline?" dl":ownDl(tk)?" own":"";
 function listItemOf(it){if(!it.fromList)return null;const L=data.lists.find(x=>x.id===it.fromList);if(!L)return null;const li=(L.items||[]).find(x=>x.id===it.fromItem);return li?{L,li}:null}
 async function syncListDate(it,d,done){const r=listItemOf(it);if(!r)return;const doc=JSON.parse(JSON.stringify(r.L));const li=doc.items.find(x=>x.id===it.fromItem);if(!li)return;if(d)li.date=d;if(done){if(doc.type==="checklist")li.done=true;else if(doc.type==="project"){li.done=true;li.doneAt=todayStr()}else doc.items=doc.items.filter(x=>x!==li)}await put("lists",doc)}
 function needOf(it){if(it.kind==="event")return Math.max(15,mins(it.end)-mins(it.start));const r=listItemOf(it);return (r&&r.li.mins)||DEFAULT_MINS}
@@ -932,7 +940,7 @@ function monthCell(day,t,MAX,narrow,showRoutine){
     for(const a of spans("away",day).concat(spans("allday",day)))
       rows.push(h("button",{class:"mi ban"+(a.kind==="away"?" away":""),title:a.title+(a.notes?"\n"+a.notes:""),text:a.title,draggable:a.date===day?"true":null,"data-id":a.id,onclick:ev=>{ev.stopPropagation();openEditor(a)}}));
     const tasks=items.filter(x=>x.kind==="task"&&x.date===day).sort((a,b)=>(a.done?1:0)-(b.done?1:0)||(b.deadline?1:0)-(a.deadline?1:0)||(a.time||"99").localeCompare(b.time||"99"));
-    for(const tk of tasks)rows.push(h("button",{class:"mi tk"+(tk.deadline?" dl":"")+(tk.done?" done":""),title:tk.title+(tk.notes?"\n"+tk.notes:""),draggable:lockedDl(tk)?"false":"true","data-id":tk.id,onclick:ev=>{ev.stopPropagation();openEditor(tk)}},(tk.time?h("span",{class:"tm",text:tk.time}):null),tk.title));
+    for(const tk of tasks)rows.push(h("button",{class:"mi tk"+dlCls(tk)+(tk.done?" done":""),title:tk.title+(tk.notes?"\n"+tk.notes:""),draggable:lockedDl(tk)?"false":"true","data-id":tk.id,onclick:ev=>{ev.stopPropagation();openEditor(tk)}},(tk.time?h("span",{class:"tm",text:tk.time}):null),tk.title));
     for(const o of eventsOn(day)){
       if(o.it.marker)continue; if(o.isRoutine&&!showRoutine)continue;
       const it=o.it,c=CATS[it.cat]?it.cat:"study";
@@ -1051,7 +1059,7 @@ function renderCal(){
     for(const tk of tasks){
       const cb=h("input",{type:"checkbox",id:"cb-"+tk.id,"aria-label":"Done: "+tk.title});cb.checked=!!tk.done;cb.onchange=async()=>{const before=snapIt(tk);const n=Object.assign({},tk,{done:cb.checked});if(!cb.checked)delete n.done;if(await save(n)){if(cb.checked)await syncListDate(tk,null,true);pushUndo((cb.checked?"Done: “":"Not done: “")+tk.title+"”",()=>save(before))}};
       const tt=h("span",{class:"tt",title:tk.notes||"",text:(tk.time?tk.time+" ":"")+tk.title});
-      const row=h("div",{class:"task"+(tk.deadline?" dl":"")+(tk.done?" done":""),draggable:"true","data-id":tk.id},cb,tt);tt.onclick=e=>{e.stopPropagation();inlineEdit(tt,tk,row)};
+      const row=h("div",{class:"task"+dlCls(tk)+(tk.done?" done":""),draggable:"true","data-id":tk.id},cb,tt);tt.onclick=e=>{e.stopPropagation();inlineEdit(tt,tk,row)};
       row.addEventListener("dragstart",e=>{e.dataTransfer.setData("text/plain",tk.id);e.dataTransfer.effectAllowed="move"});rowGestures(row,{onDel:()=>delItem(tk),onDone:tk.done?null:()=>doneItem(tk),drag:tk.done?null:tk});c.appendChild(row)}
     c.addEventListener("click",e=>{if(!(e.target===c||e.target.classList.contains("addrow2")))return;if(lastPtr!=="touch")selectSlot(d,null)});
     holdOn(c,e=>e.target===c||e.target.classList.contains("addrow2"),(x,y)=>{if(clip)pasteMenu(x,y,d,null,null)});c.addEventListener("contextmenu",e=>{if(!(e.target===c||e.target.classList.contains("addrow2"))||lastPtr==="touch"||!clip)return;e.preventDefault();pasteMenu(e.clientX,e.clientY,d,null,null)});
@@ -1095,7 +1103,7 @@ function renderCal(){
     const evs=eventsOn(d);
     for(const o of evs.filter(o=>o.it.marker)){const mm=mins(o.it.start);if(mm<START_H*60)continue;
       const mk=h("button",{class:"mark",style:"top:"+(mm-START_H*60)/60*hourPx+"px","aria-label":o.it.title+" "+o.it.start},h("span",{text:"☾ "+o.it.title+" "+o.it.start}));
-      mk.onclick=ev=>{ev.stopPropagation();if(ev.detail===0)openEditor(o.it,o.isRoutine?d:null)};attachDrag(mk,o,d,hourPx,true);if(sel&&sel.k===selKey(o.it,d)){mk.classList.add("sel");sel.it=o.it}col.appendChild(mk)}
+      mk.onclick=ev=>{ev.stopPropagation();if(ev.detail===0)openEditor(o.it,o.isRoutine?d:null)};attachDrag(mk,o,d,hourPx,true);{const S=sels.get(selKey(o.it,d));if(S){mk.classList.add("sel");S.it=o.it}}col.appendChild(mk)}
     const subEv=subOn(d).filter(x=>!x.allDay).map(x=>({it:x,isSub:true}));
     for(const o of layout(evs.filter(o=>!o.it.marker&&o.it._part!=="mid").concat(subEv).sort((a,b)=>mins(a.it.start)-mins(b.it.start)||mins(b.it.end)-mins(a.it.end)))){
       const it=o.it,s=Math.max(mins(it.start),START_H*60),e=Math.min(Math.max(mins(it.end),s+15),END_H*60);
@@ -1110,7 +1118,7 @@ function renderCal(){
       const tb=trvB(it),ta=trvA(it);
       if(tb){const tr=h("div",{class:"trv",style:pos+";top:"+((mins(it.start)-tb-START_H*60)/60*hourPx)+"px;height:"+Math.max(tb/60*hourPx-1,6)+"px",title:"Travel "+tb+" min"},tb/60*hourPx>=9?h("span",{text:ic+" "+tb+" min"}):null);tr._off=-tb;tr._len=tb;col.appendChild(tr);b._trv.push(tr)}
       if(ta){const tr=h("div",{class:"trv after",style:pos+";top:"+((mins(it.end)-START_H*60)/60*hourPx+1)+"px;height:"+Math.max(ta/60*hourPx-1,6)+"px",title:"Travel back "+ta+" min"},ta/60*hourPx>=9?h("span",{text:ic+" "+ta+" min"}):null);tr._off="end";tr._len=ta;col.appendChild(tr);b._trv.push(tr)}
-      b.onclick=ev=>{ev.stopPropagation();if(ev.detail===0||o.noDrag)openEditor(it,o.isRoutine?d:null)};if(!o.noDrag)attachDrag(b,o,d,hourPx,false);if(sel&&sel.k===selKey(it,d)){b.classList.add("sel");sel.it=it}col.appendChild(b)}
+      b.onclick=ev=>{ev.stopPropagation();if(ev.detail===0||o.noDrag)openEditor(it,o.isRoutine?d:null)};if(!o.noDrag)attachDrag(b,o,d,hourPx,false);{const S=sels.get(selKey(it,d));if(S){b.classList.add("sel");S.it=it}}col.appendChild(b)}
     if(d===t&&nowM>=START_H*60)col.appendChild(h("div",{class:"nowline",style:"top:"+(nowM-START_H*60)/60*hourPx+"px"}));
     grid.appendChild(col)}
   const prevLeft=sc.scrollLeft,sameWin=keep&&keep.start===winStart;
@@ -1542,7 +1550,7 @@ function stepRow(L,doc,x){
   const ops=h("span",{class:"ops"});
   if(!x.done&&!x.links.length&&!it.fixed)ops.appendChild(h("button",{class:"iconbtn",title:"Find a day with room for it",text:"Plan",onclick:()=>openPlanItem(doc,it)}));
   ops.appendChild(h("button",{class:"iconbtn","aria-label":"Remove "+it.text,text:"×",onclick:()=>{const before=snapIt(L);const d2=snapIt(L);d2.items=(d2.items||[]).filter(y=>y.id!==it.id);put("lists",d2).then(ok=>{if(ok)pushUndo("Removed “"+it.text+"”",()=>put("lists",before))})}}));
-  return h("div",{class:"li ps"+(x.done?" done":"")+(it.dl?" dl":"")},cb,txt,it.by?h("span",{class:"when"+(late||soon?" hot":""),title:it.dl?"Deadline":"Done by",text:(it.dl?"⚑ ":"")+dayLbl(it.by)}):null,ops)}
+  return h("div",{class:"li ps"+(x.done?" done":"")+(it.dl?" dl":it.by?" own":"")},cb,txt,it.by?h("span",{class:"when"+(late||soon?" hot":""),title:it.dl?"Deadline":"Done by",text:(it.dl?"⚑ ":"")+dayLbl(it.by)}):null,ops)}
 function projectCard(L){
   const doc=JSON.parse(JSON.stringify(L));doc.items=doc.items||[];
   const st=doc.items.map(it=>({it,links:stepLinks(L,it),done:stepDone(L,it)}));
@@ -1618,7 +1626,7 @@ function renderToday(){
   const earlier=items.filter(x=>x.kind==="task"&&!x.done&&((x.date&&x.date<d&&x.date>=addDays(d,-30))||(!x.date&&x.week===m)));
   const tr=t=>{const cb=h("input",{type:"checkbox","aria-label":"Done: "+t.title});cb.onchange=()=>doneItem(t);
     const tx=h("span",{class:"tx",text:t.title,title:"Tap to rename"});
-    const row=h("div",{class:"td-row","data-id":t.id},cb,tx,h("span",{class:"when",text:t.deadline?"⚑ "+(t.time||"due"):t.date&&t.date<d?dayLbl(t.date):t.time||(t.date?"":"this week")}),
+    const row=h("div",{class:"td-row"+dlCls(t),"data-id":t.id},cb,tx,h("span",{class:"when",text:t.deadline?"⚑ "+(t.time||"due"):t.date&&t.date<d?dayLbl(t.date):t.time||(t.date?"":"this week")}),
       h("button",{type:"button",class:"td-more","aria-label":"More for "+t.title,text:"⋯",onclick:e=>{e.stopPropagation();overdueMenu(t,e.clientX,e.clientY)}}));
     tx.onclick=e=>{e.stopPropagation();inlineEdit(tx,t,row)};
     row.addEventListener("contextmenu",e=>{if(e.target.closest("input"))return;e.preventDefault();overdueMenu(t,e.clientX,e.clientY)});
@@ -1932,7 +1940,7 @@ function renderOverdue(){
   det.appendChild(h("summary",{},"Plan today",h("span",{class:"od-n",text:list.length?list.length+" not finished":sug.length+" to pick from"})));
   if(list.length){det.appendChild(h("div",{class:"od-h",text:"Not finished"}));
     for(const it of list){const meta=it.deadline?"Deadline was "+DOW[isoDow(it.date)-1]+" "+fmtShort(it.date)+(it.time?" "+it.time:"")+": check if it's still possible":"Planned "+DOW[isoDow(it.date)-1]+" "+fmtShort(it.date)+(it.kind==="event"?" "+it.start+" · "+fmtDur(needOf(it)):"");
-      const r=h("div",{class:"odrow"+(it.deadline?" dl":""),"data-id":it.id,draggable:it.kind==="task"?"true":null},h("span",{class:"odt"},h("span",{class:"odtt",text:it.title}),h("small",{text:meta})),h("span",{class:"od-more","aria-hidden":"true",text:"⋯"}));
+      const r=h("div",{class:"odrow"+dlCls(it),"data-id":it.id,draggable:it.kind==="task"?"true":null},h("span",{class:"odt"},h("span",{class:"odtt",text:it.title}),h("small",{text:meta})),h("span",{class:"od-more","aria-hidden":"true",text:"⋯"}));
       r.onclick=e=>{if(e.target.closest(".sw-del,.sw-done"))return;overdueMenu(it,e.clientX,e.clientY)};
       rowGestures(r,{onDel:()=>delItem(it),onDone:()=>doneItem(it),drag:it.kind==="task"?it:null});det.appendChild(r)}}
   if(sug.length){const pk=h("details",{class:"od-pick"});pk.open=store("mc.pickopen")==="1";pk.ontoggle=()=>store("mc.pickopen",pk.open?"1":"0");pk.appendChild(h("summary",{class:"od-h",text:"Pick for today ("+sug.length+")"}));det.appendChild(pk);
@@ -1963,7 +1971,7 @@ function renderUni(){
     cb.onchange=async()=>{const before=snapIt(tk);const n=Object.assign({},tk);if(cb.checked){n.done=true;if(!n.date&&n.week)n.week=n.week<m?m:n.week}else delete n.done;if(await save(n)){if(cb.checked)await syncListDate(tk,null,true);pushUndo((cb.checked?"Done: “":"Not done: “")+tk.title+"”",()=>save(before))}};
     const co=courseOf(tk.title)||listCourse(tk);
     const tt=h("span",{class:"ut",text:tk.title});
-    const r=h("div",{class:"unirow"+(tk.deadline?" dl":"")+(tk.done?" done":""),"data-id":tk.id,draggable:tk.done?null:"true"},cb,h("span",{class:"ud"+(tk.date&&tk.date<t&&!tk.done?" late":""),text:lbl}),tt,co?h("span",{class:"uc",text:co}):null);
+    const r=h("div",{class:"unirow"+dlCls(tk)+(tk.done?" done":""),"data-id":tk.id,draggable:tk.done?null:"true"},cb,h("span",{class:"ud"+(tk.date&&tk.date<t&&!tk.done?" late":""),text:lbl}),tt,co?h("span",{class:"uc",text:co}):null);
     tt.onclick=e=>{if(lockedDl(tk)||tk.done){openEditor(tk);return}const acts=[["Edit",()=>openEditor(tk)],["Today",()=>taskToDay(tk,t)],["Tomorrow",()=>taskToDay(tk,addDays(t,1))],["Pick a day…",()=>pickDate("Plan “"+tk.title+"” on…",d=>taskToDay(tk,d))]];if(tk.date)acts.push(["To week list",()=>taskToWeek(tk,mondayOf(tk.date))]);popMenu(e.clientX,e.clientY,acts)};
     rowGestures(r,{onDel:()=>delItem(tk),onDone:tk.done?null:()=>doneItem(tk),drag:tk.done?null:tk});det.appendChild(r)}
   if(all.length>shown.length||uniAll)det.appendChild(h("button",{type:"button",class:"unimore",text:uniAll?"Show less":"Show everything ahead ("+all.length+")",onclick:()=>{uniAll=!uniAll;renderUni()}}));
@@ -2254,18 +2262,21 @@ function popMenu(x,y,acts,opt){closePop();const m=h("div",{class:"pop"+(acts.fil
   document.body.appendChild(m);const r=m.getBoundingClientRect();
   m.style.left=Math.max(8,Math.min(x-r.width/2,innerWidth-r.width-8))+"px";let T=y-r.height-16;if(T<8)T=y+20;T=Math.max(8,Math.min(T,innerHeight-r.height-8));m.style.top=T+"px";popEl=m;popOpt=opt||null;
   setTimeout(()=>{document.addEventListener("pointerdown",popOutside,true);window.addEventListener("scroll",popScroll,true)},0)}
-function blockMenu(it,d,isRoutine,el,x,y){selectBlock(it,d,isRoutine,el);
+function blockMenu(it,d,isRoutine,el,x,y){
+  if(sels.size>1&&sels.has(selKey(it,d))){const M=multi(),evs=M.filter(z=>z.it.kind==="event"&&!z.it.marker).map(z=>z.it._src||z.it),allOpt=evs.length&&evs.every(z=>z.optional);
+    popMenu(x,y,[["Copy "+M.length,()=>{copyMany(M);clearSel()}],["Cut",()=>{copyMany(M);clip.cut=true;deleteMany(M)}],evs.length?[allOpt?"Sure":"Maybe",async()=>{clearSel();const before=[];for(const z of evs){if(before.some(b=>b.id===z.id))continue;before.push(snapIt(z));const n=Object.assign({},z);if(allOpt)delete n.optional;else n.optional=true;await save(n)}pushUndo((allOpt?"Sure: ":"Maybe: ")+before.length+" blocks",async()=>{for(const b of before)await save(b)})}]:null,["Delete "+M.length,()=>setTimeout(()=>deleteMany(M),0),"danger"]]);return}
+  selectBlock(it,d,isRoutine,el);
   const re=()=>{sel={it,d,isRoutine}};
   const src=it._src||it,maybe=it.kind==="event"&&!it.marker?[src.optional?"Sure":"Maybe",async()=>{clearSel();const before=snapIt(src);const n=Object.assign({},src);if(src.optional)delete n.optional;else n.optional=true;if(await save(n))pushUndo((src.optional?"Sure: “":"Maybe: “")+src.title+"”",()=>save(before))}]:null;
   popMenu(x,y,[["Copy",()=>{copyItem(it);clearSel()}],lockedDl(it)?null:["Cut",()=>{copyItem(it);clip.cut=true;re();deleteSel()}],maybe,lockedDl(it)?null:["Delete",()=>{re();setTimeout(deleteSel,0)},"danger"]])}
-function pasteMenu(x,y,d,m,extra){if(!clip){extra&&extra[1]();return}popMenu(x,y,[["Paste",()=>pasteAt(d,clip.it.kind==="event"?m:null)],extra])}
+function pasteMenu(x,y,d,m,extra){if(!clip){extra&&extra[1]();return}popMenu(x,y,[[clip.multi?"Paste "+clip.multi.length+" blocks":"Paste",()=>pasteAt(d,(clip.multi?clip.base.m!=null:clip.it.kind==="event")?m:null)],extra])}
 function holdOn(el,ok,fn){el.addEventListener("pointerdown",e=>{if(e.pointerType!=="touch"||!ok(e))return;const x0=e.clientX,y0=e.clientY;let t=setTimeout(()=>{t=null;try{navigator.vibrate&&navigator.vibrate(15)}catch(_){}fn(x0,y0)},HOLD_MS);
   const stop=ev=>{if(t){clearTimeout(t);t=null}else if(ev&&ev.type==="pointerup")swallowUntil=Date.now()+400;document.removeEventListener("pointermove",mv);document.removeEventListener("pointerup",stop);document.removeEventListener("pointercancel",stop)};
   const mv=ev=>{if(Math.abs(ev.clientY-y0)>8||Math.abs(ev.clientX-x0)>8)stop()};
   document.addEventListener("pointermove",mv);document.addEventListener("pointerup",stop);document.addEventListener("pointercancel",stop)})}
 function clipLen(){const c=clip.it;return c.kind==="event"?Math.max(5,mins(c.end)-mins(c.start)):0}
 function clipDesc(){const c=clip.it;return c.kind==="event"?c.start+"–"+c.end+" ("+fmtDur(clipLen())+")":c.kind==="task"?"task"+(c.time?" at "+c.time:""):c.kind==="away"?"trip":"all-day"}
-async function pasteAt(date,startM){if(!clip)return false;const c=JSON.parse(JSON.stringify(clip.it));c.date=date;
+async function pasteAt(date,startM){if(!clip)return false;if(clip.multi)return pasteMany(date,startM);const c=JSON.parse(JSON.stringify(clip.it));c.date=date;
   if(c.kind==="event"){if(startM==null)startM=mins(c.start);const len=clipLen();startM=Math.max(0,Math.min(startM,1439-len));c.start=hm(startM);c.end=hm(startM+len);delete c.replaces}
   if(c.endDate)c.endDate=addDays(date,clip.span);
   const wasCut=clip.cut;const ok=await save(c);if(ok){if(wasCut)clip=null;try{navigator.vibrate&&navigator.vibrate(10)}catch(_){}pushUndo("Pasted: "+c.title+" · "+DOW[isoDow(date)-1]+" "+fmtShort(date)+(c.kind==="event"?" "+c.start+"–"+c.end:""),()=>del("items",ok))}return ok}
@@ -2287,10 +2298,46 @@ const snapIt=it=>JSON.parse(JSON.stringify(it));
 /* ---------- select a block: tap = select, double tap = edit, Backspace / Delete = delete ---------- */
 let sel=null,lastTap={k:null,t:0},selClearedAt=0;
 const selKey=(it,d)=>it.id+"|"+(it.repeat?d:"");
-function clearSel(){if(sel)selClearedAt=Date.now();sel=null;document.querySelectorAll(".ev.sel,.mark.sel").forEach(x=>x.classList.remove("sel"));renderSel()}
-function selectBlock(it,d,isRoutine,el){clearSlot();sel={it,d,isRoutine,k:selKey(it,d)};document.querySelectorAll(".ev.sel,.mark.sel").forEach(x=>x.classList.remove("sel"));if(el)el.classList.add("sel");renderSel()}
+const sels=new Map(); // every selected block: key -> {it,d,isRoutine,k}; sel = the last one
+const multi=()=>sels.size>1?[...sels.values()]:null;
+const MODKEY=e=>e.metaKey||e.shiftKey||(e.ctrlKey&&!/Mac|iPhone|iPad/.test(navigator.platform||""));
+function clearSel(){if(sel||sels.size)selClearedAt=Date.now();sel=null;sels.clear();document.querySelectorAll(".ev.sel,.mark.sel").forEach(x=>x.classList.remove("sel"));renderSel()}
+function selectBlock(it,d,isRoutine,el){clearSlot();sels.clear();sel={it,d,isRoutine,k:selKey(it,d)};sels.set(sel.k,sel);document.querySelectorAll(".ev.sel,.mark.sel").forEach(x=>x.classList.remove("sel"));if(el)el.classList.add("sel");renderSel()}
+function toggleSel(it,d,isRoutine,el){clearSlot();const k=selKey(it,d);
+  if(sels.has(k)){sels.delete(k);if(el)el.classList.remove("sel");sel=[...sels.values()].pop()||null}
+  else{const s0={it,d,isRoutine,k};sels.set(k,s0);sel=s0;if(el)el.classList.add("sel")}renderSel()}
+/* several blocks at once: delete, copy, cut, move */
+async function deleteMany(list){list=list.filter(x=>!lockedDl(x.it));if(!list.length)return;
+  const hasRep=list.some(x=>x.isRoutine&&x.it.repeat);
+  const run=async all=>{clearSel();const before=new Map(),skips=new Map();
+    for(const x of list){const it=x.it._src||x.it;if(before.has(it.id)&&!(x.isRoutine&&it.repeat&&!all))continue;
+      if(!before.has(it.id))before.set(it.id,snapIt(items.find(y=>y.id===it.id)||it));
+      if(x.isRoutine&&it.repeat&&!all){if(!skips.has(it.id))skips.set(it.id,new Set());skips.get(it.id).add(x.d)}else skips.delete(it.id)}
+    for(const [id,b] of before){const sk=skips.get(id);
+      if(sk){const rr=Object.assign({},b.repeat,{except:[...new Set([...(b.repeat.except||[]),...sk])]});await save(Object.assign({},b,{repeat:rr}))}
+      else await del("items",id)}
+    pushUndo("Deleted "+list.length+" blocks",async()=>{for(const b of before.values())await save(b)})};
+  if(hasRep){const el=document.querySelector(".ev.sel,.mark.sel");const r=el?el.getBoundingClientRect():{left:innerWidth/2,width:0,top:innerHeight/2};
+    popMenu(r.left+r.width/2,r.top,[["Delete "+list.length+" · repeats only on these days",()=>run(false),"danger"],["Delete, with all their repeats",()=>run(true),"danger"]],{onOutside:()=>run(false)});return}
+  run(false)}
+function copyMany(list){const parts=list.map(x=>{let it=x.it._src||x.it;const c=JSON.parse(JSON.stringify(it));for(const k of["id","repeat","done","fromList","fromItem"])delete c[k];
+    const d=x.it._src?it.date:x.d;c.date=d;if(x.it.repeat&&!x.it._src)delete c.endDate;return {it:c,d,span:(c.endDate&&c.date)?dayNum(c.endDate)-dayNum(c.date):0}});
+  const d0=parts.reduce((a,p)=>p.d<a?p.d:a,parts[0].d),ev=parts.filter(p=>p.it.kind==="event"),m0=ev.length?Math.min(...ev.filter(p=>p.d===ev.reduce((a,q)=>q.d<a?q.d:a,ev[0].d)).map(p=>mins(p.it.start))):null;
+  clip={it:parts[0].it,span:parts[0].span,multi:parts,base:{d:d0,m:m0,ed:ev.length?ev.reduce((a,q)=>q.d<a?q.d:a,ev[0].d):d0}};renderClip()}
+async function pasteMany(date,startM){const C=clip,dd=dayNum(date)-dayNum(C.base.ed||C.base.d),dm=(startM!=null&&C.base.m!=null)?startM-C.base.m:0,ids=[];
+  for(const p of C.multi){const c=JSON.parse(JSON.stringify(p.it));c.date=addDays(p.d,dd);
+    if(c.kind==="event"&&!c.endDate){const len=Math.max(5,mins(c.end)-mins(c.start));let st=Math.max(0,Math.min(mins(c.start)+dm,1439-len));c.start=hm(st);c.end=hm(st+len);delete c.replaces}
+    else if(c.kind==="event"){c.start=hm(Math.max(0,Math.min(mins(c.start)+dm,1439)));c.end=hm(Math.max(0,Math.min(mins(c.end)+dm,1439)))}
+    if(c.endDate)c.endDate=addDays(c.date,p.span);const id=await save(c);if(id)ids.push(id)}
+  if(C.cut)clip=null;if(ids.length)pushUndo("Pasted "+ids.length+" blocks",async()=>{for(const id of ids)await del("items",id)});return ids.length>0}
+async function moveOthers(primaryKey,dd,dm){const others=[...sels.values()].filter(x=>x.k!==primaryKey&&!lockedDl(x.it)&&!(x.isRoutine&&x.it.repeat));const before=[];
+  for(const x of others){const it=x.it._src||x.it,cur=items.find(y=>y.id===it.id)||it;if(before.some(b=>b.id===cur.id))continue;before.push(snapIt(cur));
+    const mv=Object.assign({},cur);if(mv.date)mv.date=addDays(mv.date,dd);if(mv.endDate)mv.endDate=addDays(mv.endDate,dd);
+    if(mv.kind==="event"&&dm){const S=mins(mv.start)+dm,E=mins(mv.end)+dm;if(!mv.endDate){const len=E-S;const st=Math.max(0,Math.min(S,1439-Math.max(5,len)));mv.start=hm(st);mv.end=hm(st+Math.max(5,len))}else{mv.start=hm(Math.max(0,Math.min(S,1439)));mv.end=hm(Math.max(0,Math.min(E,1439)))}}
+    delete mv.replaces;await save(mv)}
+  return before}
 function renderSel(){const b=document.getElementById("selbar");if(b)b.remove()}
-async function deleteSel(){if(!sel)return;const {it,d,isRoutine}=sel;
+async function deleteSel(){const M=multi();if(M)return deleteMany(M);if(!sel)return;const {it,d,isRoutine}=sel;
   if(isRoutine&&it.repeat){const el=document.querySelector(".ev.sel,.mark.sel");const r=el?el.getBoundingClientRect():{left:innerWidth/2,width:0,top:innerHeight/2};
     const one=()=>skipDay(it,d);clearSel();
     popMenu(r.left+r.width/2,r.top,[["Delete only "+(d===todayStr()?"today":DOW[isoDow(d)-1]+" "+fmtShort(d)),one,"danger"],["Delete all repeats",()=>delRoutine(it),"danger"]],{onOutside:one});return}
@@ -2303,6 +2350,7 @@ document.addEventListener("keydown",e=>{
   if((e.key==="Backspace"||e.key==="Delete")&&sel&&view==="cal"){e.preventDefault();deleteSel();return}
   if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&(e.key==="z"||e.key==="Z")&&undoStack.length){e.preventDefault();doUndo();return}
   if((e.metaKey||e.ctrlKey)&&!e.altKey&&view==="cal"){const k=e.key.toLowerCase();
+    if((k==="c"||k==="x")&&multi()&&!String(window.getSelection&&window.getSelection()||"").trim()){const M=multi();lastCopy={t:Date.now(),text:M.map(x=>blockText(x.it)).join("\n")};copyMany(M);clip.text=lastCopy.text;if(k==="x"){clip.cut=true;deleteMany(M)}else clearSel();return}
     if((k==="c"||k==="x")&&sel&&!String(window.getSelection&&window.getSelection()||"").trim()){const s0=sel;lastCopy={t:Date.now(),text:blockText(s0.it)};copyItem(s0.it);clip.text=lastCopy.text;
       if(k==="x"&&lockedDl(s0.it)){clearSel();toast("Copied. Official deadlines are not cut: it stays on its day.")}else if(k==="x"){deleteSel()}else clearSel();return}
     if(k==="v"){const t0=Date.now();setTimeout(()=>{if(pasteHandled>=t0||!clip)return;const t=pasteTarget();if(!t){toast("Click a spot in the calendar first, then Ctrl/Cmd+V.");return}pasteAt(t.d,t.m)},120)}}
@@ -2351,7 +2399,7 @@ function attachDrag(el,o,d,hourPx,isMarker){
     const e0=isMarker?s0+1:(it._part==="first"?(dayNum(it._src.endDate||addDays(d,1))-dayNum(d))*1440+mins(it._src.end):mins(it.end)),MAXE=1440+720; // a block may run on into the next morning
     let lastEv=null,raf=0,space=null;
     let tip=null;
-    const touch=e.pointerType==="touch",t0=Date.now();
+    const touch=e.pointerType==="touch",t0=Date.now(),mod=!touch&&MODKEY(e);
     let active=!touch,moved=false,newDate=d,ns=s0,ne=e0,lp=null,cp=null,done=false;
     if(touch){el.classList.add("arming");lp=setTimeout(()=>{active=true;el.classList.remove("arming");el.classList.add("dragging");try{navigator.vibrate&&navigator.vibrate(15)}catch(_){}
       if(!tip){tip=h("div",{class:"dragtip"});document.body.appendChild(tip)}tip.textContent=isResize?"Drag to change the end":isResizeTop?"Drag to change the start":"Drag to move";tip.style.left=startX+"px";tip.style.top=startY+"px";
@@ -2388,6 +2436,7 @@ function attachDrag(el,o,d,hourPx,isMarker){
       if(!moved){dragging=false;if(touch&&!active&&(Date.now()-t0>450||Date.now()-lastScroll<450))return;if(touch)swallowUntil=Date.now()+500;
         if(touch&&active){blockMenu(it,d,o.isRoutine,el,startX,startY);return}
         if(touch){clearSel();openEditor(it,o.isRoutine?d:null);return}
+        if(mod){lastTap={k:null,t:0};toggleSel(it,d,o.isRoutine,el);return}
         const k=selKey(it,d),now=Date.now();
         if(lastTap.k===k&&now-lastTap.t<450){lastTap={k:null,t:0};clearSel();openEditor(it,o.isRoutine?d:null);return}
         lastTap={k,t:now};selectBlock(it,d,o.isRoutine,el);return}
@@ -2411,7 +2460,11 @@ async function commitDrag(it,isRoutine,occDate,newDate,ns,ne,isMarker){
   if(start===it.start&&end===it.end&&newDate===occDate&&!over===!it.endDate){dragging=false;render();return}
   const where=(newDate!==occDate?DOW[isoDow(newDate)-1]+" "+fmtShort(newDate)+", ":"")+start+(isMarker?"":"–"+end);
   const before=snapIt(it);
-  if(!isRoutine){const mv=Object.assign({},it,{date:newDate,start,end});delete mv.replaces;if(over)mv.endDate=addDays(newDate,1);else delete mv.endDate;const ok=await save(mv);dragging=false;if(ok)pushUndo("Moved “"+it.title+"”: "+where,()=>save(before));render();return}
+  if(!isRoutine){const pk=selKey(it,occDate),grp=sels.size>1&&sels.has(pk)&&!isMarker&&(ne-ns)===(mins(it.end)-mins(it.start));
+    const mv=Object.assign({},it,{date:newDate,start,end});delete mv.replaces;if(over)mv.endDate=addDays(newDate,1);else delete mv.endDate;const ok=await save(mv);
+    const rest=grp&&ok?await moveOthers(pk,dayNum(newDate)-dayNum(occDate),ns-mins(it.start)):[];dragging=false;
+    if(ok){if(rest.length){const keys=new Map([...sels.values()].map(x=>[x.k,x]));sels.clear();for(const x of keys.values()){const nd=x.isRoutine&&x.it.repeat?x.d:addDays(x.d,dayNum(newDate)-dayNum(occDate));const nk=x.it.id+"|"+(x.isRoutine&&x.it.repeat?x.d:"");sels.set(nk,Object.assign({},x,{d:nd,k:nk}))}sel=[...sels.values()].pop()}
+      pushUndo(rest.length?"Moved "+(rest.length+1)+" blocks":"Moved “"+it.title+"”: "+where,async()=>{await save(before);for(const b of rest)await save(b)})}render();return}
   const one=async()=>{
     const rr=Object.assign({},it.repeat,{except:[...(it.repeat.except||[]),occDate]});
     const copy={kind:"event",title:it.title,cat:it.cat,notes:it.notes,optional:it.optional,marker:it.marker,location:it.location,date:newDate,start,end};if(over)copy.endDate=addDays(newDate,1);
