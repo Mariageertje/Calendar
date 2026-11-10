@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261110125804";
+<script>window.CAL_BUILD="20261110130552";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -281,24 +281,19 @@ input[type=text].ie:focus{outline:none}
 .mode-day .grid{grid-template-columns:46px minmax(0,1fr)}
 .grid.cont{min-width:0!important}
 .scwrap{position:relative}
-.calhead{position:sticky;top:var(--toph,0px);z-index:6;background:var(--paper);border:1px solid var(--line);border-bottom:0;border-radius:10px 10px 0 0;box-shadow:0 6px 10px -10px rgba(0,0,0,.35)}
-.calhead[hidden]{display:none}
-.calhead .chs{overflow:hidden;border-radius:10px 10px 0 0}
-.calhead .grid{min-width:0!important}
-.calhead .chg{position:absolute;left:0;top:0;bottom:0;width:46px;background:var(--paper);border-right:1px solid var(--line);border-radius:10px 0 0 0;z-index:3;pointer-events:none}
-.calhead .chg .adlabel{position:absolute;left:0;right:0;border:0}
-.calhead .dh{position:static}
 .grid.cont .ad{overflow-y:auto;overscroll-behavior:contain}
 .ad>*{flex-shrink:0}
-.calhead+.scroller,.scwrap .calhead~.scroller{border-top-left-radius:0;border-top-right-radius:0}
+.mode-week .scroller,.mode-day .scroller{overflow:auto;max-height:calc(100vh - var(--toph,0px) - 10px);max-height:calc(100dvh - var(--toph,0px) - 10px)}
+.mode-week .tlrail,.mode-day .tlrail{display:none}
+.mode-week .grid.cont,.mode-day .grid.cont{width:max-content}
+.grid.cont .dh{position:sticky;top:0;z-index:4}
+.grid.cont .corner{position:sticky;top:0;left:0;z-index:6}
+.grid.cont .adlabel{position:sticky;left:0;z-index:3;background:var(--paper)}
+.grid.cont .hours{position:sticky;left:0;z-index:3;background:var(--paper);border-right:1px solid var(--line)}
 .tlrail{position:absolute;left:1px;top:0;width:46px;z-index:5;border-radius:10px 0 0 10px;overflow:hidden}
 .tlrail>*{position:absolute;left:0;width:46px;margin:0;box-sizing:border-box;background:var(--paper);border-right:1px solid var(--line)}
 .mode-day .scroller{scroll-snap-type:x mandatory;scroll-padding-left:46px}
 .mode-day .grid.cont .col{scroll-snap-align:start;scroll-snap-stop:always}
-.mode-week .scroller.snapwk{scroll-snap-type:x mandatory;scroll-padding-left:46px}
-.mode-week .scroller:not(.snapwk){scroll-snap-type:x proximity;scroll-padding-left:46px}
-.mode-week .scroller:not(.snapwk) .grid.cont .col{scroll-snap-align:start}
-.mode-week .scroller.snapwk .grid.cont .col.wk0{scroll-snap-align:start;scroll-snap-stop:always}
 .scroller{overscroll-behavior-x:contain}
 .dh{position:sticky;top:0;padding:8px 8px 6px;border-bottom:1px solid var(--line);border-left:1px solid var(--line);background:var(--paper);z-index:2}
 .dh .dn{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
@@ -1051,11 +1046,14 @@ function visibleInfo(){const sc=$("scroller"),g=sc&&sc.querySelector(".grid.cont
 function updRange(){if(view!=="cal"||mode==="month")return;const v=visibleInfo();if(!v)return;
   let t=mode==="day"?DOW[isoDow(v.first)-1]+" "+fmtShort(v.first)+" "+v.first.slice(0,4):fmtShort(v.first)+(v.last!==v.first?" – "+fmtShort(v.last):"")+" "+v.last.slice(0,4);
   const vw=vubWeek(mondayOf(mode==="day"?v.first:addDays(v.first,Math.floor(v.k/2))));if(vw)t+=" · VUB week "+vw;$("range").textContent=t}
+function calDocked(){const sc=$("scroller");if(!sc||!innerCal())return false;const tp=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--toph"))||0;return Math.abs(sc.getBoundingClientRect().top-(tp+4))<10}
+function dockCal(){const sc=$("scroller"),tp=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--toph"))||0;window.scrollTo(0,Math.max(0,sc.getBoundingClientRect().top+window.scrollY-tp-4))}
 function renderCal(){
+  const wasDocked=calDocked(),modeChanged=shownMode!==mode;
   const m=mondayOf(cursor);let ds=days();
   vWeek.setAttribute("aria-pressed",mode==="week");vDay.setAttribute("aria-pressed",mode==="day");vMonth.setAttribute("aria-pressed",mode==="month");
   renderOverdue();renderUni();renderClip();
-  if(mode==="month"){const r=document.getElementById("tlrail");if(r)r.hidden=true;const ch0=document.getElementById("calhead");if(ch0)ch0.hidden=true;renderStrip();renderLegend();renderMonth();return}
+  if(mode==="month"){const r=document.getElementById("tlrail");if(r)r.hidden=true;renderStrip();renderLegend();renderMonth();return}
   renderStrip();renderWeekbar();renderLegend();
   renderDaystrip();
   const sc=$("scroller");if(notReady(sc))return;
@@ -1067,9 +1065,8 @@ function renderCal(){
   ds=Array.from({length:WIN_WEEKS*7},(_,i)=>addDays(winStart,i));
   const colW=mode==="week"?Math.max(118,Math.floor((sc.clientWidth-46)/7)):Math.max(200,sc.clientWidth-46);
   const grid=h("div",{class:"grid cont","data-start":winStart,"data-colw":String(colW),"data-n":String(ds.length),style:"grid-template-columns:46px repeat("+ds.length+","+colW+"px)"});const t=todayStr();
-  const hgrid=h("div",{class:"grid hgrid",style:"grid-template-columns:46px repeat("+ds.length+","+colW+"px)"});
-  hgrid.appendChild(h("div",{class:"corner"}));
-  for(const d of ds){hgrid.appendChild(h("div",{class:"dh"+(d===t?" today":"")},h("div",{class:"dn",text:DOW[isoDow(d)-1]}),h("div",{class:"dd"},h("span",{class:"num",text:String(Number(d.slice(8)))})," ",h("span",{style:"font-size:12px;font-family:var(--body);color:var(--muted)",text:MON[Number(d.slice(5,7))-1]})),intentInput(d)))}
+  grid.appendChild(h("div",{class:"corner"}));
+  for(const d of ds){grid.appendChild(h("div",{class:"dh"+(d===t?" today":"")},h("div",{class:"dn",text:DOW[isoDow(d)-1]}),h("div",{class:"dd"},h("span",{class:"num",text:String(Number(d.slice(8)))})," ",h("span",{style:"font-size:12px;font-family:var(--body);color:var(--muted)",text:MON[Number(d.slice(5,7))-1]})),intentInput(d)))}
   grid.appendChild(h("div",{class:"adlabel",text:"Day"}));
   for(const d of ds){
     const c=h("div",{class:"ad"+(d===t?" today":""),"data-date":d});
@@ -1144,20 +1141,25 @@ function renderCal(){
     if(d===t&&nowM>=START_H*60)col.appendChild(h("div",{class:"nowline",style:"top:"+(nowM-START_H*60)/60*hourPx+"px"}));
     grid.appendChild(col)}
   const prevLeft=sc.scrollLeft,sameWin=keep&&keep.start===winStart;
-  let ch=document.getElementById("calhead");if(!ch){ch=h("div",{id:"calhead",class:"calhead"},h("div",{class:"chs"}),h("div",{class:"chg"}));sc.parentNode.insertBefore(ch,sc);calheadInput(ch)}
-  const chs=ch.querySelector(".chs");ch.hidden=false;chs.innerHTML="";chs.appendChild(hgrid);mTopVar();sc.classList.toggle("snapwk",mode==="week"&&46+7*colW<=sc.clientWidth+2);
-  sc.innerHTML="";sc.appendChild(grid);
+  mTopVar();const keepTop=shownMode===mode&&old?sc.scrollTop:null;
+  sc.innerHTML="";sc.appendChild(grid);if(keepTop!=null)sc.scrollTop=keepTop;
   if(realign){const x=dayDiff(winStart,anchor)*colW;
     if(sameWin&&Math.abs(x-prevLeft)<=colW*31){sc.scrollLeft=prevLeft;requestAnimationFrame(()=>sc.scrollTo({left:x,behavior:"smooth"}))}else sc.scrollLeft=x}
   else sc.scrollLeft=(dayDiff(winStart,keep.d)+keep.frac)*colW;
-  chs.scrollLeft=sc.scrollLeft;fitAd();
-  shownCursor=cursor;shownMode=mode;updRange();drawSlot();
+  fitAd();
+  const firstWk=modeChanged&&shownMode!=null;shownCursor=cursor;shownMode=mode;updRange();drawSlot();
+  if(firstWk)setTimeout(scrollToNow,30);else if(wasDocked&&!calDocked())dockCal();
 }
-function calTop(){const c=document.getElementById("calhead");if(!c||c.hidden)return 0;return Math.max(0,c.getBoundingClientRect().bottom)}
+const innerCal=()=>view==="cal"&&mode!=="month";
+function calTop(){if(!innerCal())return 0;const sc=$("scroller"),dh=sc.querySelector(".dh");return Math.max(0,sc.getBoundingClientRect().top+(dh?dh.offsetHeight:0))}
+function calBottom(){if(!innerCal())return innerHeight;return Math.min(innerHeight,$("scroller").getBoundingClientRect().bottom)}
+function scrollV(dy){if(innerCal())$("scroller").scrollBy(0,dy);else window.scrollBy(0,dy)}
+const vY=()=>window.scrollY+(innerCal()?$("scroller").scrollTop:0);
 function fitAd(){ // the day row is as tall as the fullest day in view, not the fullest day of the whole window
   const sc=$("scroller"),g=sc&&sc.querySelector(".grid.cont"),v=visibleInfo();if(!g||!v)return;const ads=[...g.querySelectorAll(".ad")];if(!ads.length)return;
+  const h0=ads[0].offsetHeight,above=sc.scrollTop>ads[0].offsetTop+h0;
   let mx=40;for(let i=v.i;i<Math.min(ads.length,v.i+v.k);i++){const a=ads[i],l=a.lastElementChild;if(!l)continue;mx=Math.max(mx,Math.ceil(l.getBoundingClientRect().bottom-a.getBoundingClientRect().top+7))}
-  const H=mx+"px";for(const a of ads)a.style.height=H;placeRail()}
+  const H=mx+"px";for(const a of ads)a.style.height=H;if(above&&mx!==h0)sc.scrollTop+=mx-h0}
 function placeRail(){const sc=$("scroller"),g=sc&&sc.querySelector(".grid.cont"),rail=document.getElementById("tlrail");if(!g||!rail)return;
   rail.hidden=false;rail.innerHTML="";rail.style.height=(sc.offsetHeight-2)+"px";rail.style.top=(sc.offsetTop+1)+"px";const top0=sc.getBoundingClientRect().top;
   for(const el of [g.querySelector(".adlabel"),g.querySelector(".hours")]){if(!el)continue;const c=el.cloneNode(true);c.style.top=(el.getBoundingClientRect().top-top0-1)+"px";c.style.height=el.offsetHeight+"px";rail.appendChild(c)}}
@@ -1170,12 +1172,12 @@ function calheadInput(ch){ // wheel or a swipe on the day header moves the days,
 function safeRewindow(){ // rebuild the window of days without losing the place: stop any running momentum, then check the position took
   const sc=$("scroller"),g=sc.querySelector(".grid.cont");const want=visibleInfo();sc.style.overflowX="hidden";render();
   const fix=n=>{const g2=sc.querySelector(".grid.cont");if(!g2||!want)return;const cw=+g2.dataset.colw,x=dayDiff(g2.dataset.start,want.first)*cw;
-    if(Math.abs(sc.scrollLeft-x)>2)sc.scrollLeft=x;const chs=document.querySelector("#calhead .chs");if(chs)chs.scrollLeft=sc.scrollLeft;if(n>0)requestAnimationFrame(()=>fix(n-1));else sc.style.overflowX=""};
+    if(Math.abs(sc.scrollLeft-x)>2)sc.scrollLeft=x;if(n>0)requestAnimationFrame(()=>fix(n-1));else sc.style.overflowX=""};
   requestAnimationFrame(()=>fix(3))}
 window.__cal={parseQuick:(a,b)=>parseQuick(a,b),get cursor(){return cursor},get winStart(){return winStart}};
 (function(){let tEnd=null;const sc=$("scroller");
   let touching=false;sc.addEventListener("touchstart",()=>{touching=true},{passive:true});sc.addEventListener("touchend",()=>{touching=false},{passive:true});sc.addEventListener("touchcancel",()=>{touching=false},{passive:true});
-  sc.addEventListener("scroll",()=>{lastHScroll=Date.now();if(view!=="cal"||mode==="month")return;const chs=document.querySelector("#calhead .chs");if(chs)chs.scrollLeft=sc.scrollLeft;updRange();clearTimeout(tEnd);tEnd=setTimeout(function idle(){
+  sc.addEventListener("scroll",()=>{lastHScroll=Date.now();if(view!=="cal"||mode==="month")return;updRange();clearTimeout(tEnd);tEnd=setTimeout(function idle(){
     if(touching){tEnd=setTimeout(idle,200);return}
     if(dragging||document.querySelector(".overlay"))return;const v=visibleInfo();if(!v)return;
     const nc=mode==="day"?v.first:(cursor>=v.first&&cursor<=v.last?cursor:v.first);
@@ -1246,7 +1248,7 @@ function sortable(container,sel,onMove,opt){opt=opt||{};
       if(opt.group){const el=document.elementFromPoint(x,y);const q='[data-sort-group="'+opt.group+'"]';const cd=el&&el.closest(".card");const g=el&&(el.closest(q)||(cd&&cd.querySelector(q)));if(g&&g!==tgt){tgt=g;document.querySelectorAll(".sort-over").forEach(z=>z.classList.remove("sort-over"));if(g!==container)g.classList.add("sort-over");const ss=sibs();const last=ss[ss.length-1];g.insertBefore(ph,last?last.nextSibling:g.querySelector(".sort-end"))}}
       let before=null;for(const o of sibs()){const b=o.getBoundingClientRect();if(y<b.top||(y<b.bottom&&x<b.left+b.width/2&&y>=b.top)){before=o;break}}
       if(before){if(ph.nextSibling!==before)tgt.insertBefore(ph,before)}else{const ss=sibs();const last=ss[ss.length-1];if(last){if(last.nextSibling!==ph)tgt.insertBefore(ph,last.nextSibling)}else if(ph.parentElement!==tgt)tgt.insertBefore(ph,tgt.querySelector(".sort-end"))}};
-    const auto=()=>{const m=60;if(lastY<calTop()+m)window.scrollBy(0,-12);else if(lastY>innerHeight-m)window.scrollBy(0,12);raf=requestAnimationFrame(auto)};raf=requestAnimationFrame(auto);
+    const auto=()=>{const m=60;if(lastY<m)window.scrollBy(0,-12);else if(lastY>innerHeight-m)window.scrollBy(0,12);raf=requestAnimationFrame(auto)};raf=requestAnimationFrame(auto);
     const mv=ev=>{ev.preventDefault();lastY=ev.clientY;item.style.left=(ev.clientX-dx)+"px";item.style.top=(ev.clientY-dy)+"px";place(ev.clientX,ev.clientY)};
     const up=()=>{document.removeEventListener("pointermove",mv);document.removeEventListener("pointerup",up);document.removeEventListener("pointercancel",up);cancelAnimationFrame(raf);
       item.classList.remove("sorting");["position","left","top","width","zIndex","pointerEvents"].forEach(k=>item.style[k]="");document.querySelectorAll(".sort-over").forEach(z=>z.classList.remove("sort-over"));
@@ -1931,7 +1933,9 @@ function startTaskDrag(it,row,x,y){
   let target=null,raf=0,lx=x,ly=y;
   const place=(cx,cy)=>{lx=cx;ly=cy;tip.style.left=cx+"px";tip.style.top=cy+"px";clearDropMarks();target=dropTarget(cx,cy,need,it,pv);
     tip.textContent=target&&target.kind==="time"?DOW[isoDow(target.d)-1]+" "+hm(target.m)+" · "+it.title:target&&target.kind==="day"?DOW[isoDow(target.d)-1]+" "+fmtShort(target.d)+" · "+it.title:target&&target.kind==="week"?"Week list · "+it.title:it.title};
-  const auto=()=>{let dy=0;if(ly<calTop()+60)dy=-14;else if(ly>innerHeight-60)dy=14;if(dy){window.scrollBy(0,dy);place(lx,ly)}raf=requestAnimationFrame(auto)};raf=requestAnimationFrame(auto);
+  const auto=()=>{let dy=0;const ep=document.elementFromPoint(lx,ly),inS=innerCal()&&ep&&ep.closest("#scroller");
+    if(inS){if(ly<calTop()+40)dy=-14;else if(ly>calBottom()-40)dy=14;if(dy){scrollV(dy);place(lx,ly)}}
+    else{if(ly<80)dy=-14;else if(ly>innerHeight-60)dy=14;if(dy){window.scrollBy(0,dy);place(lx,ly)}}raf=requestAnimationFrame(auto)};raf=requestAnimationFrame(auto);
   const mv=ev=>{ev.preventDefault();const t=ev.touches[0];if(t)place(t.clientX,t.clientY)};
   const end=async ev=>{cancelAnimationFrame(raf);document.removeEventListener("touchmove",mv,{passive:false});document.removeEventListener("touchend",end);document.removeEventListener("touchcancel",end);
     tip.remove();pv.remove();row.classList.remove("lifted");clearDropMarks();swallowUntil=Date.now()+450;lastDragEnd=Date.now();dragging=false;
@@ -2091,7 +2095,7 @@ function openQuick(ctx){ctx=ctx||{};
 /* ---------- pinch (phone) or Ctrl + scroll / trackpad pinch (computer): zoom the hours ---------- */
 function setHour(px,anchor){px=Math.round(Math.max(24,Math.min(140,px)));if(Math.abs(px-hourPxNow())<1)return;
   document.documentElement.style.setProperty("--hour",px+"px");store("mc.hour",String(px));render();
-  if(anchor){const col=document.querySelector(".grid.cont .col");if(col){const r=col.getBoundingClientRect();window.scrollBy(0,r.top+anchor.tMin/60*px-anchor.cy)}}}
+  if(anchor){const col=document.querySelector(".grid.cont .col");if(col){const r=col.getBoundingClientRect();scrollV(r.top+anchor.tMin/60*px-anchor.cy)}}}
 (function(){const hs=+store("mc.hour");if(hs>=24&&hs<=140)document.documentElement.style.setProperty("--hour",hs+"px")})();
 (function(){const sc=$("scroller");let p=null;
   const dist=t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
@@ -2438,7 +2442,7 @@ function attachDrag(el,o,d,hourPx,isMarker){
     e.stopPropagation();
     const isResize=!isMarker&&e.target.classList&&e.target.classList.contains("rz");
     const isResizeTop=!isMarker&&e.target.classList&&e.target.classList.contains("rzt");
-    const startY=e.clientY,startX=e.clientX,startPY=e.clientY+window.scrollY,s0=mins(it.start);
+    const startY=e.clientY,startX=e.clientX,startPY=e.clientY+vY(),s0=mins(it.start);
     const e0=isMarker?s0+1:(it._part==="first"?(dayNum(it._src.endDate||addDays(d,1))-dayNum(d))*1440+mins(it._src.end):mins(it.end)),MAXE=1440+720; // a block may run on into the next morning
     let lastEv=null,raf=0,space=null;
     let tip=null;
@@ -2451,12 +2455,12 @@ function attachDrag(el,o,d,hourPx,isMarker){
     const cols=[...document.querySelectorAll(".col")];
     const label=el.querySelector(isMarker?"span":".tm");
     const onMove=ev=>{
-      const dy=ev.clientY+window.scrollY-startPY,dx=ev.clientX-startX;lastXY={x:ev.clientX,y:ev.clientY};lastEv={clientX:ev.clientX,clientY:ev.clientY,shiftKey:ev.shiftKey,altKey:ev.altKey,preventDefault(){}};
+      const dy=ev.clientY+vY()-startPY,dx=ev.clientX-startX;lastXY={x:ev.clientX,y:ev.clientY};lastEv={clientX:ev.clientX,clientY:ev.clientY,shiftKey:ev.shiftKey,altKey:ev.altKey,preventDefault(){}};
       if(!active){if(Math.abs(dy)>8||Math.abs(dx)>8)finish(false);return}
       if(!moved&&Math.abs(dy)<5&&Math.abs(dx)<5)return;
       moved=true;dragging=true;el.classList.add("dragging");ev.preventDefault();
       if(!space&&!isMarker&&!isResizeTop){const w=$("scroller").parentNode;space=h("div",{id:"dragspace",style:"height:"+(6*hourPx)+"px"});w.parentNode.insertBefore(space,w.nextSibling)}
-      if(!raf){const tick=()=>{if(done){raf=0;return}if(lastEv){const y=lastEv.clientY;const T=calTop()+50,v=y>innerHeight-60?Math.min(3,Math.ceil((y-innerHeight+60)/15)):y<T?-Math.min(3,Math.ceil((T-y)/15)):0;if(v){window.scrollBy(0,v);onMove(lastEv)}}raf=requestAnimationFrame(tick)};raf=requestAnimationFrame(tick)}
+      if(!raf){const tick=()=>{if(done){raf=0;return}if(lastEv){const y=lastEv.clientY;const T=calTop()+50,B=calBottom()-60,v=y>B?Math.min(3,Math.ceil((y-B)/15)):y<T?-Math.min(3,Math.ceil((T-y)/15)):0;if(v){scrollV(v);onMove(lastEv)}}raf=requestAnimationFrame(tick)};raf=requestAnimationFrame(tick)}
       const step=(ev.shiftKey||ev.altKey)?1:5, raw=dy/hourPx*60, snap=x=>Math.round(x/step)*step;
       if(isResize){ne=Math.max(ns+step,Math.min(snap(e0+raw),MAXE))}
       else if(isResizeTop){ns=Math.max(START_H*60,Math.min(snap(s0+raw),ne-step))}
@@ -2663,7 +2667,13 @@ function navStep(dir){
     if((e.deltaX>0&&atR)||(e.deltaX<0&&atL)){acc+=e.deltaX;if(Math.abs(acc)>180){const d=acc>0?1:-1;acc=0;cool=now+800;navStep(d)}}else acc=0;
   },{passive:true});
 })();
-function scrollToNow(){const target=document.querySelector(".col");if(target){const hr=new Date().getHours();const ch=document.getElementById("calhead"),off=(ch&&!ch.hidden?ch.offsetHeight:0)+(parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--toph"))||0)+12;const y=target.getBoundingClientRect().top+window.scrollY+Math.max(0,hr-START_H-1)*hourPxNow()-off;window.scrollTo({top:Math.max(0,y),behavior:"smooth"})}}
+let userScrollAt=0;["wheel","touchstart","keydown"].forEach(ev=>window.addEventListener(ev,()=>{userScrollAt=Date.now()},{passive:true,capture:true}));
+function scrollToNow(){const sc=$("scroller"),target=sc.querySelector(".col");if(!target)return;const hr=new Date().getHours();
+  if(innerCal()){const align=dockCal;
+    align();const t0=Date.now();setTimeout(()=>{if(userScrollAt<t0&&innerCal())align()},450);
+    const dh=sc.querySelector(".dh"),dhH=dh?dh.offsetHeight:0,hp=hourPxNow(),visH=(sc.clientHeight-dhH)/hp;let st=Math.max(0,Math.min(7,hr-1));if(hr+2>st+visH)st=Math.max(0,hr+2-visH);
+    sc.scrollTo({top:Math.max(0,target.offsetTop-dhH+(st-START_H)*hp),behavior:"smooth"});return}
+  const y=target.getBoundingClientRect().top+window.scrollY+Math.max(0,hr-START_H-1)*hourPxNow()-120;window.scrollTo({top:Math.max(0,y),behavior:"smooth"})}
 let rt;window.addEventListener("resize",()=>{clearTimeout(rt);rt=setTimeout(requestRender,150)});
 setInterval(()=>{if(loaded&&view==="cal")requestRender()},5*60*1000);
 setInterval(()=>{if(loaded&&!document.hidden)refreshSubs(false)},10*60*1000);
