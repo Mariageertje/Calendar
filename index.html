@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261110124455";
+<script>window.CAL_BUILD="20261110125804";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -288,7 +288,8 @@ input[type=text].ie:focus{outline:none}
 .calhead .chg{position:absolute;left:0;top:0;bottom:0;width:46px;background:var(--paper);border-right:1px solid var(--line);border-radius:10px 0 0 0;z-index:3;pointer-events:none}
 .calhead .chg .adlabel{position:absolute;left:0;right:0;border:0}
 .calhead .dh{position:static}
-.calhead .ad{overflow-y:auto;overscroll-behavior:contain}
+.grid.cont .ad{overflow-y:auto;overscroll-behavior:contain}
+.ad>*{flex-shrink:0}
 .calhead+.scroller,.scwrap .calhead~.scroller{border-top-left-radius:0;border-top-right-radius:0}
 .tlrail{position:absolute;left:1px;top:0;width:46px;z-index:5;border-radius:10px 0 0 10px;overflow:hidden}
 .tlrail>*{position:absolute;left:0;width:46px;margin:0;box-sizing:border-box;background:var(--paper);border-right:1px solid var(--line)}
@@ -1069,7 +1070,7 @@ function renderCal(){
   const hgrid=h("div",{class:"grid hgrid",style:"grid-template-columns:46px repeat("+ds.length+","+colW+"px)"});
   hgrid.appendChild(h("div",{class:"corner"}));
   for(const d of ds){hgrid.appendChild(h("div",{class:"dh"+(d===t?" today":"")},h("div",{class:"dn",text:DOW[isoDow(d)-1]}),h("div",{class:"dd"},h("span",{class:"num",text:String(Number(d.slice(8)))})," ",h("span",{style:"font-size:12px;font-family:var(--body);color:var(--muted)",text:MON[Number(d.slice(5,7))-1]})),intentInput(d)))}
-  hgrid.appendChild(h("div",{class:"adlabel",text:"Day"}));
+  grid.appendChild(h("div",{class:"adlabel",text:"Day"}));
   for(const d of ds){
     const c=h("div",{class:"ad"+(d===t?" today":""),"data-date":d});
     for(const a of spans("away",d).concat(spans("allday",d))){let txt=a.title;if(a.kind==="away"){if(a.date===d&&a.start)txt+=" (from "+a.start+")";if((a.endDate||a.date)===d&&a.end)txt+=" (until "+a.end+")"}
@@ -1087,9 +1088,9 @@ function renderCal(){
     c.addEventListener("dragover",e=>{e.preventDefault();c.classList.add("over")});c.addEventListener("dragleave",()=>c.classList.remove("over"));
     c.addEventListener("drop",async e=>{e.preventDefault();c.classList.remove("over");const id=e.dataTransfer.getData("text/plain");const it=items.find(x=>x.id===id);if(!it||it.kind!=="task"||it.date===d)return;await taskToDay(it,d)});
     c.appendChild(h("div",{class:"addrow2"},h("button",{class:"addtask addone",text:"+","aria-label":"Add to this day",onclick:()=>openQuick({date:d})})));
-    hgrid.appendChild(c)}
+    grid.appendChild(c)}
   let early=360;for(const d of ds){for(const o of eventsOn(d))if(!o.it.marker&&o.it._part!=="mid"&&o.it._part!=="last")early=Math.min(early,mins(o.it.start)-trvB(o.it));for(const x of subOn(d))if(!x.allDay)early=Math.min(early,mins(x.start))}
-  START_H=Math.max(0,Math.min(6,Math.floor(early/60)));
+  START_H=0; // the day starts at midnight: scroll up for the early hours and the day row
   const H=END_H-START_H, hourPx=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--hour"))||48;
   const hours=h("div",{class:"hours",style:"height:"+H*hourPx+"px"});
   for(let x=START_H+1;x<END_H;x++)hours.appendChild(h("div",{class:"hl",style:"top:"+(x-START_H)*hourPx+"px",text:pad(x)+":00"}));
@@ -1143,24 +1144,23 @@ function renderCal(){
     if(d===t&&nowM>=START_H*60)col.appendChild(h("div",{class:"nowline",style:"top:"+(nowM-START_H*60)/60*hourPx+"px"}));
     grid.appendChild(col)}
   const prevLeft=sc.scrollLeft,sameWin=keep&&keep.start===winStart;
-  let ch=document.getElementById("calhead");if(!ch){ch=h("div",{id:"calhead",class:"calhead"},h("div",{class:"chs"}),h("div",{class:"chg"},h("div",{class:"adlabel",text:"Day"})));sc.parentNode.insertBefore(ch,sc);calheadInput(ch)}
+  let ch=document.getElementById("calhead");if(!ch){ch=h("div",{id:"calhead",class:"calhead"},h("div",{class:"chs"}),h("div",{class:"chg"}));sc.parentNode.insertBefore(ch,sc);calheadInput(ch)}
   const chs=ch.querySelector(".chs");ch.hidden=false;chs.innerHTML="";chs.appendChild(hgrid);mTopVar();sc.classList.toggle("snapwk",mode==="week"&&46+7*colW<=sc.clientWidth+2);
   sc.innerHTML="";sc.appendChild(grid);
   if(realign){const x=dayDiff(winStart,anchor)*colW;
     if(sameWin&&Math.abs(x-prevLeft)<=colW*31){sc.scrollLeft=prevLeft;requestAnimationFrame(()=>sc.scrollTo({left:x,behavior:"smooth"}))}else sc.scrollLeft=x}
   else sc.scrollLeft=(dayDiff(winStart,keep.d)+keep.frac)*colW;
   chs.scrollLeft=sc.scrollLeft;fitAd();
-  const rail=document.getElementById("tlrail");
-  rail.hidden=false;rail.innerHTML="";rail.style.height=(sc.offsetHeight-2)+"px";rail.style.top=(sc.offsetTop+1)+"px";
-  {const c=hours.cloneNode(true);c.style.top=(hours.getBoundingClientRect().top-sc.getBoundingClientRect().top-1)+"px";c.style.height=hours.offsetHeight+"px";rail.appendChild(c)}
   shownCursor=cursor;shownMode=mode;updRange();drawSlot();
 }
 function calTop(){const c=document.getElementById("calhead");if(!c||c.hidden)return 0;return Math.max(0,c.getBoundingClientRect().bottom)}
-function fitAd(){const ch=document.getElementById("calhead"),v=visibleInfo();if(!ch||!v)return;const ads=[...ch.querySelectorAll(".ad")];if(!ads.length)return;
-  let mx=40;for(let i=v.i;i<Math.min(ads.length,v.i+v.k);i++){const a=ads[i];a.style.height="auto";mx=Math.max(mx,a.scrollHeight)}
-  const cap=Math.round(Math.max(64,Math.min(window.innerHeight*(window.innerWidth<600?.14:.2),200)));const H=Math.min(mx,cap)+"px";for(const a of ads)a.style.height=H;
-  const lb=ch.querySelector(".chg .adlabel");if(lb)lb.style.top=ads[0].offsetTop+"px";
-  const sc=$("scroller"),rail=document.getElementById("tlrail");if(rail&&!rail.hidden)rail.style.top=(sc.offsetTop+1)+"px"}
+function fitAd(){ // the day row is as tall as the fullest day in view, not the fullest day of the whole window
+  const sc=$("scroller"),g=sc&&sc.querySelector(".grid.cont"),v=visibleInfo();if(!g||!v)return;const ads=[...g.querySelectorAll(".ad")];if(!ads.length)return;
+  let mx=40;for(let i=v.i;i<Math.min(ads.length,v.i+v.k);i++){const a=ads[i],l=a.lastElementChild;if(!l)continue;mx=Math.max(mx,Math.ceil(l.getBoundingClientRect().bottom-a.getBoundingClientRect().top+7))}
+  const H=mx+"px";for(const a of ads)a.style.height=H;placeRail()}
+function placeRail(){const sc=$("scroller"),g=sc&&sc.querySelector(".grid.cont"),rail=document.getElementById("tlrail");if(!g||!rail)return;
+  rail.hidden=false;rail.innerHTML="";rail.style.height=(sc.offsetHeight-2)+"px";rail.style.top=(sc.offsetTop+1)+"px";const top0=sc.getBoundingClientRect().top;
+  for(const el of [g.querySelector(".adlabel"),g.querySelector(".hours")]){if(!el)continue;const c=el.cloneNode(true);c.style.top=(el.getBoundingClientRect().top-top0-1)+"px";c.style.height=el.offsetHeight+"px";rail.appendChild(c)}}
 function calheadInput(ch){ // wheel or a swipe on the day header moves the days, like the grid below
   const sc=$("scroller");ch.addEventListener("wheel",e=>{if(Math.abs(e.deltaX)>Math.abs(e.deltaY)){sc.scrollLeft+=e.deltaX;e.preventDefault()}},{passive:false});
   let x0=null,l0=0,y0=0,lock=null;
