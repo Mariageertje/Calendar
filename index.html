@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261112165715";
+<script>window.CAL_BUILD="20261112170332";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -135,7 +135,7 @@ input[type=password]{border:1px solid var(--line-strong);background:var(--bg);bo
 /* Layout: a planner sheet — sticky toolbar, deadline strip, then one grid (day names / all-day + tasks / hourly timeline). */
 :root{
   --bg:#f2f4f1; --paper:#fbfcfa; --ink:#1d2622; --muted:#5f6b66; --line:#dde2dd; --line-strong:#c6cdc7;
-  --accent:#2f6b5e; --accent-ink:#ffffff; --today:#e6efe9; --now:#c2412d; --danger:#b33a2a; --own:#9a6a00; --imp-bg:#fbe1db; --note-bg:#eceee9; --note:#5f6b66; --shadow:0 10px 30px rgba(20,30,25,.18);
+  --accent:#2f6b5e; --accent-ink:#ffffff; --today:#e6efe9; --now:#c2412d; --danger:#b33a2a; --own:#9a6a00; --imp-bg:#fbe1db; --note-bg:#f8efcc; --note:#7a5d12; --shadow:0 10px 30px rgba(20,30,25,.18);
   --c-study:#3b4fa8; --c-study-bg:#e3e7f7;
   --c-class:#4c5d74; --c-class-bg:#e2e7ee;
   --c-sport:#2f7a46; --c-sport-bg:#dcefe1;
@@ -153,14 +153,14 @@ input[type=password]{border:1px solid var(--line-strong);background:var(--bg);bo
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#121715; --paper:#181e1b; --ink:#e6ece8; --muted:#9aa7a1; --line:#29312d; --line-strong:#38423d;
-  --accent:#7cc4b1; --accent-ink:#0f1513; --today:#1d2a25; --now:#ff7a62; --danger:#ff8a78; --own:#e2b45a; --imp-bg:#4d1f19; --note-bg:#262e2a; --note:#a9b5af; --shadow:0 10px 30px rgba(0,0,0,.5);
+  --accent:#7cc4b1; --accent-ink:#0f1513; --today:#1d2a25; --now:#ff7a62; --danger:#ff8a78; --own:#e2b45a; --imp-bg:#4d1f19; --note-bg:#3a3218; --note:#e6cf88; --shadow:0 10px 30px rgba(0,0,0,.5);
   --c-study:#aebcff; --c-study-bg:#262d4d; --c-class:#b9c6d8; --c-class-bg:#2a323d; --c-sport:#93d6a6; --c-sport-bg:#1f3a28;
   --c-ritual:#8fd6d0; --c-ritual-bg:#1c3836; --c-meal:#f0c878; --c-meal-bg:#3b3019; --c-rest:#cbb8f2; --c-rest-bg:#322a46;
   --c-social:#f3a1b7; --c-social-bg:#45232d; --c-creative:#f6b48a; --c-creative-bg:#46291a; --c-chores:#d4c9b8; --c-chores-bg:#36322b;
   --c-travel:#bfcad0; --c-travel-bg:#2c3236; --c-sleep:#b4bbe0; --c-sleep-bg:#272a3c; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#121715; --paper:#181e1b; --ink:#e6ece8; --muted:#9aa7a1; --line:#29312d; --line-strong:#38423d;
-  --accent:#7cc4b1; --accent-ink:#0f1513; --today:#1d2a25; --now:#ff7a62; --danger:#ff8a78; --own:#e2b45a; --imp-bg:#4d1f19; --note-bg:#262e2a; --note:#a9b5af; --shadow:0 10px 30px rgba(0,0,0,.5);
+  --accent:#7cc4b1; --accent-ink:#0f1513; --today:#1d2a25; --now:#ff7a62; --danger:#ff8a78; --own:#e2b45a; --imp-bg:#4d1f19; --note-bg:#3a3218; --note:#e6cf88; --shadow:0 10px 30px rgba(0,0,0,.5);
   --c-study:#aebcff; --c-study-bg:#262d4d; --c-class:#b9c6d8; --c-class-bg:#2a323d; --c-sport:#93d6a6; --c-sport-bg:#1f3a28;
   --c-ritual:#8fd6d0; --c-ritual-bg:#1c3836; --c-meal:#f0c878; --c-meal-bg:#3b3019; --c-rest:#cbb8f2; --c-rest-bg:#322a46;
   --c-social:#f3a1b7; --c-social-bg:#45232d; --c-creative:#f6b48a; --c-creative-bg:#46291a; --c-chores:#d4c9b8; --c-chores-bg:#36322b;
