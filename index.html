@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261112170332";
+<script>window.CAL_BUILD="20261112174211";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -2546,7 +2546,8 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
    '<label>Title<input type="text" id="f-title" required></label>'+
    '<div class="row"><label class="k-event k-task k-away k-allday">Date<input type="date" id="f-date"></label>'+
      '<label class="k-event k-away k-allday" id="f-endLbl"><span id="f-endTxt">Until</span><input type="date" id="f-endDate"></label></div>'+
-   '<div class="row k-event k-away"><label>Start<input type="time" id="f-start" step="60"></label><label>End<input type="time" id="f-end" step="60"></label></div>'+
+   '<div class="k-away"><label class="inline"><input type="checkbox" id="f-wholeday"> Whole days (no times)</label></div>'+
+   '<div class="row k-event k-away" id="f-times"><label>Start<input type="time" id="f-start" step="60"></label><label>End<input type="time" id="f-end" step="60"></label></div>'+
    '<div class="row k-task"><label>Time (optional)<input type="time" id="f-time" step="60"></label><label class="inline" style="align-self:end"><input type="checkbox" id="f-deadline"> Deadline</label><label class="inline" style="align-self:end"><input type="checkbox" id="f-uni"> University</label></div>'+
    '<div class="locrow k-event k-away"><label>Location<input type="text" id="f-loc" list="f-locs" autocomplete="off" placeholder="Place or address"></label><a id="f-map" target="_blank" rel="noopener" hidden>Open in Maps</a></div>'+
    '<div class="k-event trvrow"><span class="wk-label">Travel time</span><div class="trvf"><label>Before<input type="number" id="f-tb" min="0" step="5" inputmode="numeric" placeholder="0"></label><label>After<input type="number" id="f-ta" min="0" step="5" inputmode="numeric" placeholder="0"></label><label>By<select id="f-tm"><option value="bike">Bike</option><option value="walk">Walk</option><option value="car">Car</option><option value="transit">Train / tram</option></select></label><button type="button" class="btn sm" id="f-tcalc">Calculate</button></div><p class="why" id="f-tinfo" style="margin:2px 0 0"></p></div><datalist id="f-locs">'+knownLocations().map(x=>'<option value="'+esc(x)+'"></option>').join("")+'</datalist>'+
@@ -2565,12 +2566,13 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
   let k=kind;
   const f=id=>sh.querySelector("#f-"+id);
   f("title").value=it.title||"";f("date").value=occDate||it.date||cursor;f("endDate").value=it.endDate||"";
-  f("start").value=it.start||"09:00";f("end").value=it.end||"10:00";f("time").value=it.time||"";f("deadline").checked=!!it.deadline;f("uni").checked=isUni(Object.assign({kind:"task"},it));
+  f("start").value=it.start||"09:00";f("end").value=it.end||"10:00";f("wholeday").checked=kind==="away"?(!it.start&&!it.end):true;f("wholeday").onchange=()=>{f("times").hidden=f("wholeday").checked};f("time").value=it.time||"";f("deadline").checked=!!it.deadline;f("uni").checked=isUni(Object.assign({kind:"task"},it));
   f("repeat").value=r?String(r.every||1):"0";f("from").value=r?(r.from||""):"";f("until").value=r?(r.until||""):"";
   f("loc").value=it.location||"";const syncMap=()=>{const v=f("loc").value.trim();const a=sh.querySelector("#f-map");a.hidden=!v;if(v)a.href="https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(v)};f("loc").addEventListener("input",syncMap);syncMap();f("imp").checked=isImp(it);f("optional").checked=!!it.optional;f("marker").checked=!!it.marker;f("flex").checked=!!it.flex;f("notes").value=it.notes||"";
   function sync(){
     sh.querySelectorAll(".kinds button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.k===k));
     sh.querySelectorAll(".k-event,.k-task,.k-away,.k-allday").forEach(el=>{el.hidden=!el.classList.contains("k-"+k)});
+    if(k==="away"&&f("wholeday").checked)f("times").hidden=true;
     const rep=f("repeat").value!=="0";
     if(k==="event"){sh.querySelectorAll(".rep").forEach(el=>el.hidden=!rep);sh.querySelectorAll(".norep").forEach(el=>el.hidden=rep);if(rep)sh.querySelector("#f-endLbl").hidden=true}
     sh.querySelector("#f-endTxt").textContent=k==="event"?"Ends on (later day)":"Until";
@@ -2604,7 +2606,7 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
       else{delete o.replaces;const ed=f("endDate").value;if(ed&&ed>o.date)o.endDate=ed;else if(!o.marker&&mins(o.end)<mins(o.start))o.endDate=addDays(o.date,1)}}
     if(k==="task"){o.time=f("time").value||undefined;o.deadline=f("deadline").checked||undefined;o.done=it.done||undefined;for(const key of ["week","order","mins"])if(it[key]!==undefined&&!o.date)o[key]=it[key];const u=f("uni").checked;if(u!==UNI_RE.test(o.title))o.uni=u;else delete o.uni}
     if(k==="event"||k==="allday"){const auto=/^(EXAM|DEADLINE)\b|^Examen\b/.test(o.title||"");o.imp=f("imp").checked?true:(auto?false:undefined)}
-    if(k==="away"||k==="allday"){o.endDate=f("endDate").value||undefined;if(k==="away"){o.start=f("start").value;o.end=f("end").value}}
+    if(k==="away"||k==="allday"){o.endDate=f("endDate").value||undefined;if(k==="away"){if(f("wholeday").checked){delete o.start;delete o.end}else{o.start=f("start").value;o.end=f("end").value}}}
     return o}
   function valid(o){if(!o.title){toast("Add a title first.");return false}if(!o.date&&!o.repeat){toast("Pick a date.");return false}
     if(o.kind==="event"&&!o.marker&&!o.endDate&&(o.repeat?mins(o.end)===mins(o.start):mins(o.end)<=mins(o.start))){toast("End time must be after the start time.");return false}return true}
