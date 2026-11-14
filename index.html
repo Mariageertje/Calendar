@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261114145134";
+<script>window.CAL_BUILD="20261114150003";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -463,6 +463,7 @@ input[type=text].intent:focus{outline:none;color:var(--ink);font-style:normal;bo
 .row{display:flex;gap:10px;flex-wrap:wrap}
 .row>label{flex:1 1 140px;min-width:0}
 label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.flab{display:flex;flex-direction:column;align-items:flex-start;gap:4px;font-size:12px;color:var(--muted)}.flab .seg button{font-size:14px;color:var(--ink)}.flab .seg button[aria-pressed="true"]{color:var(--accent-ink)}
 label.inline{flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:13px}
 input[type=text],input[type=date],input[type=time],select,textarea{border:1px solid var(--line-strong);background:var(--bg);border-radius:8px;padding:7px 9px;color:var(--ink);font-size:14px;width:100%;min-width:0}
 textarea{min-height:60px;resize:vertical}
@@ -916,7 +917,10 @@ function days(){if(mode==="day")return[cursor];const m=mondayOf(cursor);return[0
 /* ---------- move unfinished things to another day ---------- */
 const isImp=it=>!!(it&&it.imp!==false&&(it.imp||/^(EXAM|DEADLINE)\b|^Examen\b/.test(it.title||"")));
 function ownDl(tk){if(!tk||tk.kind!=="task"||tk.deadline)return false;const r=listItemOf(tk);return !!(r&&r.L.type==="project"&&r.li.by&&!r.li.dl)}
-const dlCls=tk=>tk.deadline?" dl":ownDl(tk)?" own":"";
+// Task colour: "imp" (red), "own" (yellow) or "". tk.mark ("red"|"yellow"|"none") overrides the automatic colour.
+const autoLevel=tk=>tk.deadline||tk.imp===true||isImp(tk)?"imp":ownDl(tk)?"own":"";
+const tkLevel=tk=>{if(!tk||tk.kind!=="task")return"";const m=tk.mark;return m==="red"?"imp":m==="yellow"?"own":m==="none"?"":autoLevel(tk)};
+const dlCls=tk=>{const l=tkLevel(tk);return l==="imp"?" dl":l==="own"?" own":""};
 function listItemOf(it){if(!it.fromList)return null;const L=data.lists.find(x=>x.id===it.fromList);if(!L)return null;const li=(L.items||[]).find(x=>x.id===it.fromItem);return li?{L,li}:null}
 async function syncListDate(it,d,done){const r=listItemOf(it);if(!r)return;const doc=JSON.parse(JSON.stringify(r.L));const li=doc.items.find(x=>x.id===it.fromItem);if(!li)return;if(d)li.date=d;if(done){if(doc.type==="checklist")li.done=true;else if(doc.type==="project"){li.done=true;li.doneAt=todayStr()}else doc.items=doc.items.filter(x=>x!==li)}await put("lists",doc)}
 function needOf(it){if(it.kind==="event")return Math.max(15,mins(it.end)-mins(it.start));const r=listItemOf(it);return (r&&r.li.mins)||DEFAULT_MINS}
@@ -956,7 +960,7 @@ function monthCell(day,t,MAX,narrow,showRoutine){
     const rows=[];
     for(const a of spans("away",day).concat(spans("allday",day)))
       rows.push(h("button",{class:"mi ban"+(a.kind==="away"?" away":"")+(isImp(a)?" imp":""),title:a.title+(a.notes?"\n"+a.notes:""),text:a.title,draggable:a.date===day?"true":null,"data-id":a.id,onclick:ev=>{ev.stopPropagation();openEditor(a)}}));
-    const tasks=items.filter(x=>x.kind==="task"&&x.date===day&&!x.done&&(x.deadline||isImp(x))).sort((a,b)=>(a.done?1:0)-(b.done?1:0)||(b.deadline?1:0)-(a.deadline?1:0)||(a.time||"99").localeCompare(b.time||"99"));
+    const tasks=items.filter(x=>x.kind==="task"&&x.date===day&&!x.done&&tkLevel(x)==="imp").sort((a,b)=>(a.done?1:0)-(b.done?1:0)||(b.deadline?1:0)-(a.deadline?1:0)||(a.time||"99").localeCompare(b.time||"99"));
     for(const tk of tasks)rows.push(h("button",{class:"mi tk"+dlCls(tk)+(tk.done?" done":""),title:tk.title+(tk.notes?"\n"+tk.notes:""),draggable:lockedDl(tk)?"false":"true","data-id":tk.id,onclick:ev=>{ev.stopPropagation();openEditor(tk)}},(tk.time?h("span",{class:"tm",text:tk.time}):null),tk.title));
     const timed=[];
     for(const o of eventsOn(day)){
@@ -2551,6 +2555,7 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
    '<div class="k-away"><label class="inline"><input type="checkbox" id="f-wholeday"> Whole days (no times)</label></div>'+
    '<div class="row k-event k-away" id="f-times"><label>Start<input type="time" id="f-start" step="60"></label><label>End<input type="time" id="f-end" step="60"></label></div>'+
    '<div class="row k-task"><label>Time (optional)<input type="time" id="f-time" step="60"></label><label class="inline" style="align-self:end"><input type="checkbox" id="f-deadline"> Deadline</label><label class="inline" style="align-self:end"><input type="checkbox" id="f-uni"> University</label></div>'+
+   '<div class="row k-task"><div class="flab">Colour<span class="seg" id="f-mark" role="group" aria-label="Colour"><button type="button" data-l="">None</button><button type="button" data-l="own">Yellow</button><button type="button" data-l="imp">Red</button></span></div></div>'+
    '<div class="locrow k-event k-away"><label>Location<input type="text" id="f-loc" list="f-locs" autocomplete="off" placeholder="Place or address"></label><a id="f-map" target="_blank" rel="noopener" hidden>Open in Maps</a></div>'+
    '<div class="k-event trvrow"><span class="wk-label">Travel time</span><div class="trvf"><label>Before<input type="number" id="f-tb" min="0" step="5" inputmode="numeric" placeholder="0"></label><label>After<input type="number" id="f-ta" min="0" step="5" inputmode="numeric" placeholder="0"></label><label>By<select id="f-tm"><option value="bike">Bike</option><option value="walk">Walk</option><option value="car">Car</option><option value="transit">Train / tram</option></select></label><button type="button" class="btn sm" id="f-tcalc">Calculate</button></div><p class="why" id="f-tinfo" style="margin:2px 0 0"></p></div><datalist id="f-locs">'+knownLocations().map(x=>'<option value="'+esc(x)+'"></option>').join("")+'</datalist>'+
    '<label class="k-event">Category<select id="f-cat">'+catOpts+'</select></label>'+
@@ -2568,7 +2573,7 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
   let k=kind;
   const f=id=>sh.querySelector("#f-"+id);
   f("title").value=it.title||"";f("date").value=occDate||it.date||cursor;f("endDate").value=it.endDate||"";
-  f("start").value=it.start||"09:00";f("end").value=it.end||"10:00";f("wholeday").checked=kind==="away"?(!it.start&&!it.end):true;f("wholeday").onchange=()=>{f("times").hidden=f("wholeday").checked};f("time").value=it.time||"";f("deadline").checked=!!it.deadline;f("uni").checked=isUni(Object.assign({kind:"task"},it));
+  f("start").value=it.start||"09:00";f("end").value=it.end||"10:00";f("wholeday").checked=kind==="away"?(!it.start&&!it.end):true;f("wholeday").onchange=()=>{f("times").hidden=f("wholeday").checked};f("time").value=it.time||"";f("deadline").checked=!!it.deadline;{let lv=tkLevel(Object.assign({kind:"task"},it));const mb=f("mark");const paint=()=>mb.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.l===lv)));mb.onclick=e=>{const b=e.target.closest("button");if(b){lv=b.dataset.l;mb.dataset.l=lv;paint()}};mb.dataset.l=lv;paint();f("deadline").onchange=()=>{if(f("deadline").checked){lv="imp";mb.dataset.l=lv;paint()}}}f("uni").checked=isUni(Object.assign({kind:"task"},it));
   f("repeat").value=r?String(r.every||1):"0";f("from").value=r?(r.from||""):"";f("until").value=r?(r.until||""):"";
   f("loc").value=it.location||"";const syncMap=()=>{const v=f("loc").value.trim();const a=sh.querySelector("#f-map");a.hidden=!v;if(v)a.href="https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(v)};f("loc").addEventListener("input",syncMap);syncMap();f("imp").checked=isImp(it);f("optional").checked=!!it.optional;f("marker").checked=!!it.marker;f("flex").checked=!!it.flex;f("notes").value=it.notes||"";
   function sync(){
@@ -2606,7 +2611,8 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
         o.repeat={days:ds.length?ds:[isoDow(o.date)],every:ev,from:f("from").value||(r&&r.from)||o.date,until:f("until").value||undefined,except:(r&&r.except)||[]};
         if(!o.repeat.until)delete o.repeat.until;o.date=undefined}
       else{delete o.replaces;const ed=f("endDate").value;if(ed&&ed>o.date)o.endDate=ed;else if(!o.marker&&mins(o.end)<mins(o.start))o.endDate=addDays(o.date,1)}}
-    if(k==="task"){o.time=f("time").value||undefined;o.deadline=f("deadline").checked||undefined;o.done=it.done||undefined;for(const key of ["week","order","mins"])if(it[key]!==undefined&&!o.date)o[key]=it[key];const u=f("uni").checked;if(u!==UNI_RE.test(o.title))o.uni=u;else delete o.uni}
+    if(k==="task"){o.time=f("time").value||undefined;o.deadline=f("deadline").checked||undefined;o.done=it.done||undefined;for(const key of ["week","order","mins"])if(it[key]!==undefined&&!o.date)o[key]=it[key];const u=f("uni").checked;if(u!==UNI_RE.test(o.title))o.uni=u;else delete o.uni;
+      const lv=f("mark").dataset.l||"";if(lv!==autoLevel(o))o.mark={"":"none",own:"yellow",imp:"red"}[lv]}
     if(k==="event"||k==="allday"){const auto=/^(EXAM|DEADLINE)\b|^Examen\b/.test(o.title||"");o.imp=f("imp").checked?true:(auto?false:undefined)}
     if(k==="away"||k==="allday"){o.endDate=f("endDate").value||undefined;if(k==="away"){if(f("wholeday").checked){delete o.start;delete o.end}else{o.start=f("start").value;o.end=f("end").value}}}
     return o}
