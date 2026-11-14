@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261114143901";
+<script>window.CAL_BUILD="20261114144148";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -959,7 +959,7 @@ function monthCell(day,t,MAX,narrow,showRoutine){
     const tasks=items.filter(x=>x.kind==="task"&&x.date===day).sort((a,b)=>(a.done?1:0)-(b.done?1:0)||(b.deadline?1:0)-(a.deadline?1:0)||(a.time||"99").localeCompare(b.time||"99"));
     for(const tk of tasks)rows.push(h("button",{class:"mi tk"+dlCls(tk)+(tk.done?" done":""),title:tk.title+(tk.notes?"\n"+tk.notes:""),draggable:lockedDl(tk)?"false":"true","data-id":tk.id,onclick:ev=>{ev.stopPropagation();openEditor(tk)}},(tk.time?h("span",{class:"tm",text:tk.time}):null),tk.title));
     for(const o of eventsOn(day)){
-      if(o.it.marker)continue; if(o.isRoutine&&!showRoutine&&!["class","creative","social","study"].includes(o.it.cat))continue; // lessons stay visible
+      if(o.it.marker)continue; if(o.isRoutine&&!showRoutine&&!["class","creative","social","study","sport"].includes(o.it.cat))continue; // lessons stay visible
       const it=o.it,c=CATS[it.cat]?it.cat:"study";
       rows.push(h("button",{class:"mi"+(it.optional?" opt":"")+(isImp(it)?" imp":""),style:"background:var(--c-"+c+"-bg);color:var(--c-"+c+")",title:it.title+" · "+it.start+"–"+it.end+(it.notes?"\n"+it.notes:""),draggable:o.isRoutine?null:"true","data-id":it.id,
         onclick:ev=>{ev.stopPropagation();openEditor(it,o.isRoutine?day:null)}},h("span",{class:"tm",text:it.start}),it.title));
