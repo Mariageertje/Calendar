@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Calendar">
 <meta name="robots" content="noindex">
 <script src="config.js"></script>
-<script>window.CAL_BUILD="20261114150003";
+<script>window.CAL_BUILD="20261116132232";
 /* Calendar app: local-first store on this device + sync with a private GitHub repository.
    Same interface the page expects from claude.use("db"): collection(c).onSnapshot(cb) / doc(id).set(d) / doc(id).delete().
    Data lives in data/<collection>.json in the repository: one object, id -> document; every document carries _t (last change,
@@ -338,6 +338,7 @@ input[type=text].intent:focus{outline:none;color:var(--ink);font-style:normal;bo
 .ev.routine{opacity:.92}
 .ev.opt{opacity:.55;border:1.5px dashed currentColor}.ev.opt:hover,.ev.opt.sel,.ev.opt.dragging{opacity:.9}
 .mi.opt{opacity:.55}
+.banner.opt{opacity:.55}
 .ev:hover{box-shadow:0 0 0 2px var(--accent)}
 .ev{touch-action:pan-x pan-y;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .ev .rz{position:absolute;left:0;right:0;bottom:0;height:9px;cursor:ns-resize;touch-action:pan-x pan-y}
@@ -744,7 +745,7 @@ const DAY_END_DEFAULT=22*60+30, LATEST_END=21*60+30, MIN_GAP=15, DEFAULT_MINS=30
 function fmtDur(m){m=Math.max(0,Math.round(m));if(m<60)return m+" min";const h0=Math.floor(m/60),r=m%60;return h0+"h"+(r?pad(r):"")}
 function capacity(d){
   const t=todayStr(); if(d<t)return {past:true,free:0,flexMins:0,slots:[],level:"past"};
-  const awayFull=spans("away",d).some(a=>(a.date<d||!a.start||mins(a.start)<=8*60)&&((a.endDate||a.date)>d||!a.end||mins(a.end)>=21*60));
+  const awayFull=spans("away",d).some(a=>!a.optional&&(a.date<d||!a.start||mins(a.start)<=8*60)&&((a.endDate||a.date)>d||!a.end||mins(a.end)>=21*60));
   if(awayFull)return {away:true,free:0,flexMins:0,slots:[],level:"away"};
   const ev=eventsOn(d,true), mk=ev.find(o=>o.it.marker);
   const end=Math.min(mk?mins(mk.it.start):DAY_END_DEFAULT,LATEST_END); // nothing from the lists after 21:30: evenings stay for winding down
@@ -861,7 +862,7 @@ function eventsOn(date,all){
     else if(it.endDate&&it.endDate>it.date){if(it.date<=date&&it.endDate>=date){const p=partOf(it,date,it.date,it.endDate);if(p)fixed.push({it:p,isRoutine:false})}}
     else if(it.date===date)fixed.push({it,isRoutine:false});
   }
-  const aways=items.filter(i=>i.kind==="away");
+  const aways=items.filter(i=>i.kind==="away"&&!i.optional); // a maybe-trip hides nothing
   const blockers=[];
   const vis=routine.filter(({it})=>{
     const s=dn*1440+mins(it.start), e=dn*1440+mins(it.end);
@@ -959,7 +960,7 @@ function monthCell(day,t,MAX,narrow,showRoutine){
     cell.appendChild(h("button",{class:"mnum","aria-label":"Open "+DOW[isoDow(day)-1]+" "+fmtShort(day),text:dn===1?MONTHS[Number(day.slice(5,7))-1].slice(0,3)+" 1":String(dn),onclick:()=>openDay(day)}));
     const rows=[];
     for(const a of spans("away",day).concat(spans("allday",day)))
-      rows.push(h("button",{class:"mi ban"+(a.kind==="away"?" away":"")+(isImp(a)?" imp":""),title:a.title+(a.notes?"\n"+a.notes:""),text:a.title,draggable:a.date===day?"true":null,"data-id":a.id,onclick:ev=>{ev.stopPropagation();openEditor(a)}}));
+      rows.push(h("button",{class:"mi ban"+(a.kind==="away"?" away":"")+(a.optional?" opt":"")+(isImp(a)?" imp":""),title:a.title+(a.notes?"\n"+a.notes:""),text:a.title,draggable:a.date===day?"true":null,"data-id":a.id,onclick:ev=>{ev.stopPropagation();openEditor(a)}}));
     const tasks=items.filter(x=>x.kind==="task"&&x.date===day&&!x.done&&tkLevel(x)==="imp").sort((a,b)=>(a.done?1:0)-(b.done?1:0)||(b.deadline?1:0)-(a.deadline?1:0)||(a.time||"99").localeCompare(b.time||"99"));
     for(const tk of tasks)rows.push(h("button",{class:"mi tk"+dlCls(tk)+(tk.done?" done":""),title:tk.title+(tk.notes?"\n"+tk.notes:""),draggable:lockedDl(tk)?"false":"true","data-id":tk.id,onclick:ev=>{ev.stopPropagation();openEditor(tk)}},(tk.time?h("span",{class:"tm",text:tk.time}):null),tk.title));
     const timed=[];
@@ -1084,7 +1085,7 @@ function renderCal(){
   for(const d of ds){
     const c=h("div",{class:"ad"+(d===t?" today":""),"data-date":d});
     for(const a of spans("away",d).concat(spans("allday",d))){let txt=a.title;if(a.kind==="away"){if(a.date===d&&a.start)txt+=" (from "+a.start+")";if((a.endDate||a.date)===d&&a.end)txt+=" (until "+a.end+")"}
-      c.appendChild(h("button",{class:"banner"+(a.kind==="allday"?" allday":"")+(isImp(a)?" imp":""),title:a.notes||"",text:txt,onclick:()=>openEditor(a)}))}
+      c.appendChild(h("button",{class:"banner"+(a.kind==="allday"?" allday":"")+(a.optional?" opt":"")+(isImp(a)?" imp":""),title:a.notes||"",text:txt,onclick:()=>openEditor(a)}))}
     for(const o of eventsOn(d).filter(o=>o.it._part==="mid")){const it=o.it,c0=CATS[it.cat]?it.cat:"study";c.appendChild(h("button",{class:"banner evmulti"+(it.optional?" opt":""),style:"background:var(--c-"+c0+"-bg);color:var(--c-"+c0+");border-color:transparent",title:it.title,text:"↔ "+it.title,onclick:()=>openEditor(it._src)}))}
     for(const x of subOn(d).filter(x=>x.allDay)){const sb=subById(x.sub);c.appendChild(h("button",{class:"banner sub",style:subStyle(sb),title:(sb&&sb.name)||"",text:x.title,onclick:()=>openSubEvent(x)}))}
     const tasks=items.filter(x=>x.kind==="task"&&x.date===d).sort((a,b)=>(a.done?1:0)-(b.done?1:0)||(b.deadline?1:0)-(a.deadline?1:0)||(a.time||"99").localeCompare(b.time||"99"));
@@ -2563,7 +2564,7 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
    '<div class="k-event rep"><div class="days">'+dayBoxes+'</div></div>'+
    '<div class="row k-event rep"><label>Repeat from<input type="date" id="f-from"></label><label>Repeat until<input type="date" id="f-until"></label></div>'+
    '<div class="k-event k-allday"><label class="inline"><input type="checkbox" id="f-imp"> Important (red)</label></div>'+
-   '<div class="k-event"><label class="inline"><input type="checkbox" id="f-optional"> Maybe (see-through, does not block time)</label></div>'+
+   '<div class="k-event k-away"><label class="inline"><input type="checkbox" id="f-optional"> Maybe (see-through, does not block time)</label></div>'+
    '<div class="k-event"><label class="inline"><input type="checkbox" id="f-marker"> Time mark only (no duration, e.g. lights out)</label></div>'+
    '<div class="k-event"><label class="inline"><input type="checkbox" id="f-flex"> Flexible time: tasks from my lists may go here</label></div>'+
    '<label>Notes<textarea id="f-notes"></textarea></label>'+
@@ -2614,7 +2615,7 @@ function openEditor(it,occDate){if(it&&it._src)it=it._src;
     if(k==="task"){o.time=f("time").value||undefined;o.deadline=f("deadline").checked||undefined;o.done=it.done||undefined;for(const key of ["week","order","mins"])if(it[key]!==undefined&&!o.date)o[key]=it[key];const u=f("uni").checked;if(u!==UNI_RE.test(o.title))o.uni=u;else delete o.uni;
       const lv=f("mark").dataset.l||"";if(lv!==autoLevel(o))o.mark={"":"none",own:"yellow",imp:"red"}[lv]}
     if(k==="event"||k==="allday"){const auto=/^(EXAM|DEADLINE)\b|^Examen\b/.test(o.title||"");o.imp=f("imp").checked?true:(auto?false:undefined)}
-    if(k==="away"||k==="allday"){o.endDate=f("endDate").value||undefined;if(k==="away"){if(f("wholeday").checked){delete o.start;delete o.end}else{o.start=f("start").value;o.end=f("end").value}}}
+    if(k==="away"||k==="allday"){o.endDate=f("endDate").value||undefined;if(k==="away"){o.optional=f("optional").checked||undefined;if(f("wholeday").checked){delete o.start;delete o.end}else{o.start=f("start").value;o.end=f("end").value}}}
     return o}
   function valid(o){if(!o.title){toast("Add a title first.");return false}if(!o.date&&!o.repeat){toast("Pick a date.");return false}
     if(o.kind==="event"&&!o.marker&&!o.endDate&&(o.repeat?mins(o.end)===mins(o.start):mins(o.end)<=mins(o.start))){toast("End time must be after the start time.");return false}return true}
